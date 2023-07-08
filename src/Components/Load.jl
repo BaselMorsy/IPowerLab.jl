@@ -1,4 +1,3 @@
-using Parameters
 @with_kw mutable struct Load
 
     objtyp = 4

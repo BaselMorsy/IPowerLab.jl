@@ -1,8 +1,8 @@
 using JSON
 using DataStructures
 using GZip
-using CSV
-using DataFrames
+# using CSV
+# using DataFrames
 using HTTP
 
 

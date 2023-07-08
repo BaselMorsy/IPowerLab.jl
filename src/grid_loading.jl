@@ -1,22 +1,9 @@
-using Parameters
-using DataFrames
 using CSV
-using Graphs
-using GraphRecipes
-using Plots
+# using Graphs
+# using GraphRecipes
+# using Plots
 
-include("Components/Grid.jl")
-include("Components/Bus.jl")
-include("Components/Branch.jl")
-include("Components/Generator.jl")
-include("Components/Load.jl")
-include("Components/Substation.jl")
-include("Components/Storage.jl")
-include("Components/Switch.jl")
-include("Components/DCBranch.jl")
-include("Components/DCBus.jl")
-include("Components/Converter.jl")
-include("Components/DCLink.jl")
+include("Components/Components.jl")
 include("Ybus.jl")
 
 

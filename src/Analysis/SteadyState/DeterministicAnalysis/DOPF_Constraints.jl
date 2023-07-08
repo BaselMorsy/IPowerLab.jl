@@ -1,5 +1,5 @@
 using JuMP
-using Parameters
+# using Parameters
 
 @with_kw mutable struct DOPF_SimulationSettings
     time_horizon = [1] # can be any range e.g. 1:24, note that any non-continous range can pose problems for temporal transition constraints

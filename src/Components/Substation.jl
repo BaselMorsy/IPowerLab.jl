@@ -1,4 +1,3 @@
-using Parameters
 @with_kw mutable struct SubStation
 
     objtyp = 5

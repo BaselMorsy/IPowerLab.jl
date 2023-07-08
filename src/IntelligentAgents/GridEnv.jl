@@ -1,7 +1,6 @@
 
 abstract type Environment end
 
-using Parameters
 @with_kw mutable struct OPF_ENV <: Environment
     grid::PowerGrid
     prerequisites::OPF_Prerequisites

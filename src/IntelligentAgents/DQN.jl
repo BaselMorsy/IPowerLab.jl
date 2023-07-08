@@ -1,4 +1,4 @@
-using Flux, Statistics
+using Statistics
 
 struct DQNAgent <: Agent
     model::Chain
