@@ -4,7 +4,7 @@ module IPowerLab
     using JuMP, Ipopt
     import Gurobi
     using Gurobi
-    ENV["GUROBI_HOME"] = "C:\\Program Files\\gurobi903\\win64"
+    # ENV["GUROBI_HOME"] = "C:\\Program Files\\gurobi903\\win64"
     include("grid_loading.jl")
     include("GridManipulation/grid_functions.jl")
     include("Analysis/PowerMarkets/PowerMarkets.jl")
