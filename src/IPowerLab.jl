@@ -12,7 +12,7 @@ module IPowerLab
     include("Parsers/Matpower_Parser.jl")
     include("Parsers/UC_case_parser.jl")
     include("GridVisualization/visualize.jl")
-    include("IntelligentAgents/Jim.jl")
+    # include("IntelligentAgents/Jim.jl")
 
     @exportPublic()
 end

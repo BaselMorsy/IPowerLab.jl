@@ -3,8 +3,8 @@ abstract type Environment end
 
 @with_kw mutable struct OPF_ENV <: Environment
     grid::PowerGrid
-    prerequisites::OPF_Prerequisites
-    simulation_settings::OPF_SimulationSettings
+    prerequisites::DOPF_Prerequisites
+    simulation_settings::DOPF_SimulationSettings
     n_states::Int64
     n_actions::Int64
 end
