@@ -20,8 +20,8 @@
     contingency_types = [:ac_branch, :dc_branch, :dc_link, :ac_gen, :dc_gen, :conv, :coupler] # Can be any subset of the provided default vector
     contingency_redispatch_condition = :loss_of_generation # could also be :none or :all
 
-    NLP_solver = Ipopt.Optimizer
-    MILP_solver = Gurobi.Optimizer
+    NLP_solver = [] #Ipopt.Optimizer
+    MILP_solver = [] #Gurobi.Optimizer
     Meta_solver = :none # => A pipeline of solution algorithms. To be determined. Here is where innovation happens!
 end
 
