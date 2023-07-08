@@ -8,4 +8,4 @@ IPowerLab or IPL (stands for Intelligent Power Lab), is a Julia package for powe
 
 In REPL type:
 
-] add https://github.com/BaselMorsy/IPowerLab.jl
+`] add https://github.com/BaselMorsy/IPowerLab.jl`
