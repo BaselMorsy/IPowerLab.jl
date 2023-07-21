@@ -1,5 +1,5 @@
-import .IPowerLab
-using .IPowerLab
+import IPowerLab
+using IPowerLab
 using Ipopt
 using Gurobi
 using JuMP
