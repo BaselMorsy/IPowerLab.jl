@@ -1,3 +1,4 @@
+import IPowerLab
 using IPowerLab
 using Ipopt
 using Gurobi
