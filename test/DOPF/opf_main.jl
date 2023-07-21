@@ -3,7 +3,6 @@ using Ipopt
 using Gurobi
 using JuMP
 using Plots
-ENV["GUROBI_HOME"] = "C:\\Program Files\\gurobi903\\win64" # change this based on your system
 
 type=:AC_cases
 lst = show_cases(true; type=type)
