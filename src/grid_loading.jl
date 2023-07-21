@@ -6,6 +6,11 @@ using CSV
 include("Components/Components.jl")
 include("Ybus.jl")
 
+cases_dir = abspath(joinpath(@__DIR__, "..", "test", "Systems"))
+AC_dir = joinpath(cases_dir, "pglib-opf", "benchmark_cases")
+ACDC_dir = joinpath(cases_dir, "ACDC")
+UC_dir = joinpath(cases_dir, "AC_UC")
+
 
 function BuildGrid(Sbase,LineData,BusData,GenData)
     """
@@ -138,45 +143,41 @@ function show_cases(verbose; type=:AC_cases)
     type: could be :AC_cases for pglib_opf benchmark cases,
         or :ACDC_cases for hybrid benchmark systems, or :UC_cases for unit commitment cases
     """
-    
-    lst_dir = abspath(joinpath(@__DIR__, ".."))
+
     if type == :AC_cases
-        lst = readdir(string(lst_dir,"\\test\\Systems\\pglib-opf\\benchmark_cases"))
+        cases = readdir(AC_dir)
     elseif type == :ACDC_cases
-        lst = readdir(string(lst_dir,"\\test\\Systems\\ACDC"))
+        cases = readdir(ACDC_dir)
     elseif type == :UC_cases
-        lst = readdir(string(lst_dir,"\\test\\Systems\\AC_UC"))
-        if length(lst) == 0
+        cases = readdir(UC_dir)
+        if length(cases) == 0
             println("No UC cases downloaded, please use `download_UC_case(case_name::string; date::string)`")
         end
     end
 
     if verbose
-        for i in 1:length(lst)
-            println("[INFO] ", lst[i]," - ", i)
+        for (i, case) in enumerate(cases)
+            println("[INFO] ", case," - ", i)
         end
     end
-    return lst
+    return cases
 end
 
 function load_system(case_id; type=:AC_cases, date="2017-02-18")
     """
     date: only relevant for UC_cases. Use a date of a downloaded case
     """
-    lst_dir = abspath(joinpath(@__DIR__, ".."))
-    lst = show_cases(false, type=type)
-    CASE_NAME= lst[case_id]
-
+    
+    CASE_NAME = show_cases(false, type=type)[case_id]
+    
     if type == :AC_cases
-        CASE_DIR = string(lst_dir,"\\test\\Systems\\pglib-opf\\benchmark_cases")
-        m_file_path = joinpath(CASE_DIR, CASE_NAME)
-        return parse_matpower_case(m_file_path; start_node_from_1=true)
+        return parse_matpower_case(joinpath(AC_dir, CASE_NAME);
+                 start_node_from_1=true)
     elseif type == :ACDC_cases
-        CASE_DIR = string(lst_dir,"\\test\\Systems\\ACDC")
-        m_file_path = joinpath(CASE_DIR, CASE_NAME)
-        return parse_matpower_case(m_file_path; start_node_from_1=true)
+        return parse_matpower_case(joinpath(ACDC_dir, CASE_NAME);
+                 start_node_from_1=true)
     elseif type == :UC_cases
-        CASE_DIR = string(lst_dir,"\\test\\Systems\\AC_UC")
+        CASE_DIR = UC_dir
         json_grid_file_path = joinpath(joinpath(CASE_DIR, CASE_NAME), date*".json.gz")
         std_case_lst = show_cases(false, type=:AC_cases)
         standard_case_name = []
