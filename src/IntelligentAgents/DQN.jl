@@ -1,5 +1,3 @@
-using Statistics
-
 struct DQNAgent <: Agent
     model::Chain
     target_model::Chain

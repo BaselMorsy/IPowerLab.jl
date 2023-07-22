@@ -1,4 +1,3 @@
-using Flux
 abstract type Agent end
 # Define a single experience
 struct Experience

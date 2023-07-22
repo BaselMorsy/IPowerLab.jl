@@ -1,4 +1,3 @@
-using BSON
 mutable struct OrnsteinUhlenbeckProcess
     # Number of dimensions
     dimensions::Int

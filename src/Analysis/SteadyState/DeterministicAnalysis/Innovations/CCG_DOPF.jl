@@ -1,5 +1,3 @@
-# include("DOPF_Constraints.jl")
-
 function build_DOPF_MP!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites)
     return build_full_DOPF_model!(grid,SimulationSettings,prerequisites_data)
 end
@@ -43,6 +41,9 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
     LS_it = [] # to be calculated later
 
     solved_MP_model = []
+
+    MP_model = []
+    SP_models = Dict()
     #Main loop
     while δ ≥ ϵ
         iter_count = iter_count + 1
@@ -62,6 +63,7 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
             Threads.@threads for k in collect(setdiff(Set(K_all),Set(prerequisites_data.k_t[t])))
                 SP_model = build_DOPF_SP!(grid, SimulationSettings, prerequisites_data)
                 solved_SP_model = solve_decomposed_model!(SP_model)
+                push!(SP_models, (t,k) => solved_SP_model)
                 UB_tk[t,k] = JuMP.objective_value(solved_SP_model)
             end
         end
@@ -83,7 +85,6 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
 
     return solved_MP_model
 end
-
 
 function find_next_k(v::Vector, nk::Int)
     return sortperm(v, rev=true)[1:nk]

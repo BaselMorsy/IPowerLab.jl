@@ -1,8 +1,3 @@
-# include("../Components/Grid.jl")
-
-using JLD2
-using FileIO
-
 function add_bus!(grid ::PowerGrid,bus_id;V_max=1.1,V_min=0.9,δ_max=0.6,δ_min=-0.6)
     switch_id = grid.N_switch + 1
     new_switch = Switch(SwitchID=switch_id,Switch_ObjID=(1,bus_id))
@@ -290,7 +285,7 @@ function apply_single_load_profile!(grid ::PowerGrid, load_profile)
     end
 end
 
-function load_custom_grid(CASE_DIR;S_base=100)
+function load_custom_grid_from_csv(CASE_DIR;S_base=100)
     bus_data_raw = DataFrame(CSV.read(string(CASE_DIR,"/","bus.csv"),DataFrame ;copycols = true))
     line_data_raw = DataFrame(CSV.read(string(CASE_DIR,"/","branch.csv"),DataFrame ;copycols = true))
     gen_data_raw =  DataFrame(CSV.read(string(CASE_DIR,"/","gen.csv"),DataFrame ;copycols = true))
@@ -322,10 +317,6 @@ function load_custom_grid(CASE_DIR;S_base=100)
 
     return grid
     
-end
-
-function load_grid_snapshot(grid ::PowerGrid,t)
-    # grid2load = deepcopy(grid)
 end
 
 function save_grid_object(grid ::PowerGrid,save_path)
@@ -361,5 +352,4 @@ function idealize_substation(grid::PowerGrid, substation_ids)
 end
 
 function deidealize_substation!(grid ::PowerGrid, substation_ids)
-
 end

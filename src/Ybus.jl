@@ -36,10 +36,9 @@ function Y_Bus(LineData,N)
     end
 
      return Y_bus, b
- end
+end
 
-
- function Y_Bus_Grid(grid ::PowerGrid)
+function Y_Bus_Grid(grid ::PowerGrid; t=1, k=1)
 
     @assert length(keys(grid.Buses)) == grid.N_bus
 
@@ -50,27 +49,45 @@ function Y_Bus(LineData,N)
 
     y_bus = zeros(grid.N_bus,grid.N_bus)*0*im
     b_line = zeros(grid.N_bus,grid.N_bus)*0*im
-    for i in keys(grid.Buses)
-        for j in keys(grid.Buses)
-            if i != j
-                if Set([i,j]) in keys(branch_dictionary)
-                    my_branch = grid.Branches[branch_dictionary[Set([i,j])]]
-                    r = my_branch.r
-                    x = my_branch.x
-                    z = r + x*im
-                    b = my_branch.b
-                    b_line[i,i] += im*b/2
-                    y_bus[i,j] = -1/z
-                end
-            end
+
+    for l in keys(grid.Branches)            
+        if get(get(grid.Branches[l].GeneralSwitch.SwitchingStatus_tk,t,Dict()),k,1) == 1
+            x = grid.Branches[l].x
+            r = grid.Branches[l].r
+            z = r + x*im
+            b = grid.Branches[l].b
+            fr = grid.Branches[l].Fr_bus_ID
+            to = grid.Branches[l].To_bus_ID
+            y_bus[fr,to] = -1/z
+            y_bus[to,fr] = -1/z
+            b_line[fr,fr] += im*b/2
+            b_line[to,to] += im*b/2
         end
     end
     
     for i in keys(grid.Buses)
-        
         sums = collect(setdiff(Set(keys(grid.Buses)),Set([i])))
-        y_bus[i,i] = b_line[i,i] + sum(y_bus[i,k] for k in sums)
+        y_bus[i,i] = b_line[i,i] - sum(y_bus[i,k] for k in sums)
     end
 
     return y_bus,b_line
- end
+end
+
+function B_Bus_Grid(grid::PowerGrid; t=1, k=1)
+    B = zeros(grid.N_bus, grid.N_bus)
+    for l in keys(grid.Branches)
+        if grid.Branches[l].BranchType == 0
+            if get(get(grid.Branches[l].GeneralSwitch.SwitchingStatus_tk,t,Dict()),k,1) == 1
+                x = grid.Branches[l].x
+                fr = grid.Branches[l].Fr_bus_ID
+                to = grid.Branches[l].To_bus_ID
+                B[fr,to] = 1/x
+                B[to,fr] = 1/x
+            end
+        end
+    end
+    for i in 1:grid.N_bus
+        B[i,i] = -sum(B[i,:])
+    end
+    return B
+end

@@ -1,136 +1,5 @@
-using CSV
-# using Graphs
-# using GraphRecipes
-# using Plots
-
 include("Components/Components.jl")
 include("Ybus.jl")
-
-
-function BuildGrid(Sbase,LineData,BusData,GenData)
-    """
-    Soon will be removed!
-    """
-    Y_bus = []
-    b_line = []
-    Buses = Dict()
-    Branches = Dict()
-    Loads = Dict()
-    Generators = Dict()
-
-    gens_at_bus = Dict()
-    branches_at_bus = Dict()
-
-    switch_counter = 0
-    branch_counter = 0
-    bus_counter = 0
-    load_counter = 0
-    gen_counter = 0
-
-    N_bus = []
-    N_gen = []
-    N_load = []
-    N_branch = []
-    N_switch = []
-
-    if LineData != []
-        N_bus = length(unique!(vcat(unique!(Vector(LineData[!,:fbus])),unique!(Vector(LineData[!,:tbus])))))
-        Y_bus,b_line = Y_Bus(LineData,N_bus)
-
-        for line in eachrow(LineData)
-            objtyp = 2
-            branch_counter += 1
-            switch_counter += 1
-            new_switch = Switch(SwitchID=switch_counter,Switch_ObjID=(objtyp,line[:ID]))
-            new_line = Branch(LineID=line[:ID],Fr_bus_ID=line[:fbus],To_bus_ID=line[:tbus],
-                BranchType=0,GeneralSwitch=new_switch,r=line[:r],x=line[:x],b=line[:b],
-                rating=line[:rate])
-            push!(Branches,line[:ID]=>new_line)
-
-            if new_line.Fr_bus_ID in keys(branches_at_bus)
-                push!(branches_at_bus[new_line.Fr_bus_ID],new_line.LineID)
-            else
-                push!(branches_at_bus,new_line.Fr_bus_ID=>[new_line.LineID])
-            end
-
-            if new_line.To_bus_ID in keys(branches_at_bus)
-                push!(branches_at_bus[new_line.To_bus_ID],new_line.LineID)
-            else
-                push!(branches_at_bus,new_line.To_bus_ID=>[new_line.LineID])
-            end
-        end
-
-    end
-    
-    if GenData != []
-        for gen in eachrow(GenData)
-            objtyp = 3
-            gen_counter += 1
-            switch_counter += 1
-            new_switch = Switch(SwitchID=switch_counter,Switch_ObjID=(objtyp,gen_counter))
-            new_gen = Generator(GenID=gen_counter,GenBus_ID=gen[:bus],GeneralSwitch=new_switch,C0=gen[:C0],C1=gen[:C1],C2=gen[:C2],
-                Pg_max=gen[:Pmax],Pg_min=gen[:Pmin],Qg_max=gen[:Qmax],Qg_min=gen[:Qmin])
-            push!(Generators,gen_counter=>new_gen)
-
-            if new_gen.GenBus_ID in keys(gens_at_bus)
-                push!(gens_at_bus[new_gen.GenBus_ID],new_gen.GenID)
-            else
-                push!(gens_at_bus,new_gen.GenBus_ID=>[new_gen.GenID])
-            end
-
-        end
-
-    end
-
-    if BusData != []
-        
-        for bus in eachrow(BusData)
-            switch_counter +=1
-            bus_counter +=1
-            load_counter +=1
-            objtyp = 1
-            new_switch = Switch(SwitchID=switch_counter,Switch_ObjID=(objtyp,bus[:bus_i]))
-            new_load = Load(LoadID=bus[:bus_i],LoadBus_ID=bus[:bus_i],Pd=bus[:Pd],Qd=bus[:Qd],Shedding_Cost=1e4, Pd_t=[bus[:Pd]])
-            new_bus = Bus(BusID=bus[:bus_i],GeneralSwitch=new_switch,V_max=bus[:Vmax],V_min=bus[:Vmin])
-            
-            if new_bus.BusID in keys(branches_at_bus)
-                new_bus.ConnectedLinesIDs = branches_at_bus[new_bus.BusID]
-            end
-
-            new_bus.ConnectedLoadsIDs = [new_load.LoadID]
-
-            if new_bus.BusID in keys(gens_at_bus)
-                new_bus.ConnectedGensIDs = gens_at_bus[new_bus.BusID]
-            end
-
-            push!(Buses, bus[:bus_i]=>new_bus)
-            push!(Loads,bus[:bus_i]=>new_load)
-        end
-    end
-
-    N_gen = gen_counter
-    N_load = load_counter
-    N_branch = branch_counter
-    N_switch = switch_counter
-
-    grid = PowerGrid(GridID=1,Areas=1)
-    grid.Buses = Buses
-    grid.Loads = Loads
-    grid.Branches = Branches
-    grid.Generators = Generators
-
-    grid.N_bus = N_bus
-    grid.N_gen = N_gen
-    grid.N_load = N_load
-    grid.N_branch = N_branch
-    grid.N_switch = N_switch
-
-    grid.Y_bus =  Y_bus
-    grid.b_line = b_line
-    grid.S_base = Sbase
-
-   return grid
-end
 
 function show_cases(verbose; type=:AC_cases)
 
@@ -209,39 +78,6 @@ function load_system(case_id; type=:AC_cases, date="2017-02-18")
         end
     end
 
-end
-
-function load_case(case_id,Sbase)
-    """
-    Soon will be removed!
-    """
-   lst = show_cases(false)
-   CASE_DIR = string(string(@__DIR__,"\\Systems\\csv"),"/",lst[case_id])
-
-   line_data_raw = DataFrame(CSV.read(string(CASE_DIR,"/","branch.csv"),DataFrame ;copycols = true))
-   LineData = DataFrame(fbus = line_data_raw[:,1],tbus = line_data_raw[:,2],r = line_data_raw[:,3],x = line_data_raw[:,4],b = line_data_raw[:,5],rate = line_data_raw[:,6]./Sbase,ID = collect(1:length(line_data_raw[:,6])), is_aux = zeros(length(line_data_raw[:,1]),))
-
-   bus_data_raw = DataFrame(CSV.read(string(CASE_DIR,"/","bus.csv"),DataFrame ;copycols = true))
-   BusData = DataFrame(bus_i = bus_data_raw[:,1],type = bus_data_raw[:,2],Pd = bus_data_raw[:,3],Qd = bus_data_raw[:,4],Vmax = bus_data_raw[:,12],Vmin = bus_data_raw[:,13],is_aux = zeros(length(bus_data_raw[:,1]),))
-
-   gen_raw =  DataFrame(CSV.read(string(CASE_DIR,"/","gen.csv"),DataFrame ;copycols = true))
-   gen_cost_raw =  DataFrame(CSV.read(string(CASE_DIR,"/","gencost.csv"),DataFrame ;copycols = true))
-   GenData = DataFrame(bus = gen_raw[:,1],C2 = gen_cost_raw[:,5],C1 = gen_cost_raw[:,6],C0 = gen_cost_raw[:,7],Pmax = gen_raw[:,9],Pmin = gen_raw[:,10], Qmax = gen_raw[:,4], Qmin = gen_raw[:,5])
-
-
-   return BuildGrid(Sbase,LineData,BusData,GenData)
-end
-
-function load_saved_case(case_id)
-    lst = show_cases(false)
-
-    if occursin("pglib_opf_",lst[case_id])
-        file_name = replace(lst[case_id],"pglib_opf_"=>"")
-    elseif occursin("UC_",lst[case_id])
-        file_name = replace(lst[case_id],"UC_"=>"")
-    end
-    CASE_DIR = string(string(@__DIR__,"\\Systems\\csv"),"/",lst[case_id],"/",file_name)
-    return load_grid_object(CASE_DIR)
 end
 
 function set_load_multiplier!(grid ::PowerGrid,value)
@@ -476,7 +312,7 @@ function activate_transmission_switch!(grid ::PowerGrid, branch_ids)
     end
 end
 
-function reduce_grid!(grid ::PowerGrid;clean=false)
+function reduce_grid!(grid::PowerGrid;clean=false, t=1, k=1)
 
     busbar_sections = []
     aux_buses = []
@@ -504,7 +340,7 @@ function reduce_grid!(grid ::PowerGrid;clean=false)
             if reconf_id ∉ removed_lines
                 reconf_line = grid.Branches[reconf_id]
                 #check if reconf line is on to merge buses
-                if reconf_line.GeneralSwitch.SwitchingStatus == 1 
+                if reconf_line.GeneralSwitch.SwitchingStatus_tk[t][k] == 1 
                     Fr_bus_id = reconf_line.Fr_bus_ID # nonaux root bus (will not be removed)
                     To_bus_id = reconf_line.To_bus_ID # aux bus (will be merged)
                 
@@ -561,7 +397,7 @@ function reduce_grid!(grid ::PowerGrid;clean=false)
             # check couplers
             for coupler_id in coupler_line_ids
                 coupler_branch = grid.Branches[coupler_id]
-                if coupler_branch.GeneralSwitch.SwitchingStatus == 1
+                if coupler_branch.GeneralSwitch.SwitchingStatus_tk[t][k] == 1
                     transferable_branches = collect(setdiff(Set(grid.Buses[coupler_branch.To_bus_ID].ConnectedLinesIDs),Set(removed_lines)))
                     append!(grid.Buses[coupler_branch.Fr_bus_ID].ConnectedGensIDs,grid.Buses[coupler_branch.To_bus_ID].ConnectedGensIDs)
                     append!(grid.Buses[coupler_branch.Fr_bus_ID].ConnectedLinesIDs,transferable_branches)
@@ -585,7 +421,7 @@ function reduce_grid!(grid ::PowerGrid;clean=false)
                             grid.Branches[branch_id].To_bus_ID = coupler_branch.Fr_bus_ID
                         end
                     end
-                    grid.Buses[coupler_branch.To_bus_ID].GeneralSwitch.SwitchingStatus = 0 
+                    grid.Buses[coupler_branch.To_bus_ID].GeneralSwitch.SwitchingStatus_tk[t][k] = 0 
                 end
                 
 
@@ -613,7 +449,8 @@ function reduce_grid!(grid ::PowerGrid;clean=false)
 
     # remove inactive buses
     for bus_id in keys(grid.Buses)
-        if grid.Buses[bus_id].GeneralSwitch.SwitchingStatus == 0
+        Σconnections = length(grid.Buses[bus_id].ConnectedLinesIDs)+length(grid.Buses[bus_id].ConnectedGensIDs)+length(grid.Buses[bus_id].ConnectedLoadsIDs)
+        if Σconnections == 0
             delete!(grid.Buses,bus_id)
             grid.N_bus -= 1
             grid.N_switch -= 1
@@ -724,4 +561,3 @@ function apply_switching_status!(grid ::PowerGrid)
     end
     
 end
-

@@ -1,6 +1,4 @@
-# include("DOPF_Constraints.jl")
 # A file containting all non-binary/fixed models
-
 function Fixed_UC_Model!(model::Model, grid::PowerGrid, simulation_settings::DOPF_SimulationSettings,
     prerequisites_data::DOPF_Prerequisites, order_book::OrderBook)
     
@@ -18,7 +16,7 @@ function Fixed_UC_Model!(model::Model, grid::PowerGrid, simulation_settings::DOP
         JuMP.unset_binary.(unsolved_model[:α_gt])
         JuMP.unset_binary.(unsolved_model[:β_gt])
     end
-
+    DOPF_objective_function!(unsolved_model,grid,simulation_settings,prerequisites_data)
     solved_flag_relaxed = optimize_DOPF_model!(unsolved_model, grid, simulation_settings, prerequisites_data, order_book; update_grid=false)
     return unsolved_model, solved_flag_relaxed
 end
@@ -58,7 +56,7 @@ function Fixed_NCUC_Model!(model::Model, grid::PowerGrid, simulation_settings::D
         JuMP.unset_binary.(unsolved_model[:α_gt])
         JuMP.unset_binary.(unsolved_model[:β_gt])
     end
-
+    DOPF_objective_function!(unsolved_model,grid,simulation_settings,prerequisites_data)
     DOPF_single_node_balance!(unsolved_model, grid, simulation_settings, prerequisites_data)
     solved_flag_relaxed = optimize_DOPF_model!(unsolved_model, grid, simulation_settings, prerequisites_data, order_book; update_grid=false)
 
@@ -105,7 +103,7 @@ function Fixed_SCUC_Model!(model::Model, grid::PowerGrid, simulation_settings::D
         solutions_u_gt_f = JuMP.value.(model[:u_gt_f])
         JuMP.fix.(unsolved_model[:u_gt_f], solutions_u_gt_f; force = true)
     end
-
+    DOPF_objective_function!(unsolved_model,grid,simulation_settings,prerequisites_data)
     DOPF_single_node_balance!(unsolved_model, grid, simulation_settings, prerequisites_data)
     solved_flag_relaxed = optimize_DOPF_model!(unsolved_model, grid, simulation_settings, prerequisites_data, order_book; update_grid=false)
     return unsolved_model, solved_flag_relaxed
@@ -135,7 +133,7 @@ function Fixed_SCOPF_Model!(model::Model, grid::PowerGrid, simulation_settings::
     end
 
     DOPF_single_node_balance!(unsolved_model, grid, simulation_settings, prerequisites_data)
-
+    DOPF_objective_function!(unsolved_model,grid,simulation_settings,prerequisites_data)
     solved_flag_relaxed = optimize_DOPF_model!(unsolved_model, grid, simulation_settings, prerequisites_data, order_book; update_grid=false)
     return unsolved_model, solved_flag_relaxed
 end

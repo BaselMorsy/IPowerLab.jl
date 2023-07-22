@@ -1,7 +1,3 @@
-using GraphRecipes
-using Plots
-using Graphs
-
 function Plot_PowerGrid(grid ::PowerGrid; from_results=false, node_size=0.3,font_size=3)
     
     busbar_sections = []
@@ -281,4 +277,7 @@ function Plot_PowerGrid(grid ::PowerGrid; from_results=false, node_size=0.3,font
           edgecolor = edgecolors,method=:stress,trim=true)
 
     # return g,names,nodeshapes,nodecolors,edgestyles,edgecolors
+end
+
+function Plot_PowerFlows(grid::PowerGrid)
 end

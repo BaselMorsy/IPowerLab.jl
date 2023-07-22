@@ -1,5 +1,4 @@
-import .IPowerLab
-using .IPowerLab
+using IPowerLab
 using Ipopt
 using Gurobi
 using JuMP
@@ -8,7 +7,7 @@ ENV["GUROBI_HOME"] = "C:\\Program Files\\gurobi903\\win64" # change this based o
 
 type=:AC_cases
 lst = show_cases(true; type=type)
-case_id = 6
+case_id = 3
 date="2017-02-18"
 grid = load_system(case_id; type=type, date=date)
 
@@ -19,11 +18,7 @@ time_horizon = [1]
 
 SimulationSettings = DOPF_SimulationSettings(time_horizon = time_horizon,
     ac_grid_model = :Bθ,
-    dc_grid_model = :NF, # could be neglected if you don't have a dc part of the grid as well as all consequent dc grid hyper params
-    converter_model = :NF_lossless,
-    dynamic_converter_control = true,
-    converter_modularization = :discrete,
-    load_shedding = [], # if empty then no load shedding is allowed at all
+    load_shedding = [:post], # if empty then no load shedding is allowed at all
     transmission_switching = [:post], # if empty then TS will be utilized pre and post contingencies
     substation_switching = Dict("splitting" => [:post], "reconf" => [:pre]),
     activate_temporal_switching = false, # to impose switching frequency constraints
@@ -53,12 +48,12 @@ switching_specs = Dict("substation_ids" => S, "hybrid_substation_ids" => H, "B2B
 compile_grid_topology!(grid, SimulationSettings, switching_specs)
 
 all_gen_ids = [gen_id for gen_id in keys(grid.Generators) if grid.Generators[gen_id].GenType != :virtual]
-contingency_specs = Dict("include_leafs" => true, "k" => 0)
+contingency_specs = Dict("include_leafs" => true, "k" => 1)
 generation_specs = Dict("commitable_gen_ids" => [], "non_commitable_gen_ids" => all_gen_ids, "fixed_commitments" => Dict(), "fixed_schedules" => Dict())
-reference_node = nothing
+reference_node = 69
 simulation_type = :OPF
 prerequisites, virtual_market = compile_prerequisites_DOPF_no_market!(grid, simulation_type, SimulationSettings, contingency_specs, switching_specs,
-    generation_specs; relaxed_physics_lines=[], relaxed_physics_nodes=[], relaxed_capacity_lines=[],reference_node=nothing)
+    generation_specs; relaxed_physics_lines=[], relaxed_physics_nodes=[], relaxed_capacity_lines=[],reference_node=reference_node)
 
 run_DOPF_simulation!(grid, SimulationSettings, prerequisites, virtual_market; update_grid=true)
 
@@ -66,3 +61,14 @@ update_grid_tables_DOPF!(grid; t=1, k=1)
 
 println(grid.BusData_output)
 println(grid.LineLoading)
+
+profits_pre_switching = calculate_line_profits(grid, prerequisites; t=1, k=1, real_duals=true)
+
+chains_pre_swiching, cycles, profit_in_cycle_pre_swiching, Δλ_in_cycle, PF_in_cycle = analyze_grid_chains(grid, profits_pre_switching)
+
+print(profits_pre_switching)
+
+profit_in_cycle_pre_swiching_sorted = sort(profit_in_cycle_pre_swiching)
+most_profitable_chain_pre_switching = findfirst(x -> x == profit_in_cycle_pre_swiching_sorted[end], profit_in_cycle_pre_swiching)
+profits_of_most_profitable_chain = filter(row -> row.line_id ∈ chains_pre_swiching[most_profitable_chain_pre_switching][1], profits_pre_switching)
+println(profits_of_most_profitable_chain)

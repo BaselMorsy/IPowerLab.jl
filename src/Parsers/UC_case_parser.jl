@@ -1,11 +1,3 @@
-using JSON
-using DataStructures
-using GZip
-# using CSV
-# using DataFrames
-using HTTP
-
-
 function _get_links(url::AbstractString)
     response = HTTP.get(url)
     html = String(response.body)
@@ -30,7 +22,7 @@ function download_available_UC_cases_on_date(date="2017-02-18")
     end
 end
 
-function download_UC_case(case_name; date="2017-02-18")
+function download_UC_case(case_name::AbstractString; date="2017-02-18")
     """
     case_name: case name from "https://axavier.org/UnitCommitment.jl/0.3/instances/matpower" -> has to be a matpower case if you're 
                 interested in power flows

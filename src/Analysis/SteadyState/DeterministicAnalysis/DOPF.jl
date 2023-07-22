@@ -1,14 +1,13 @@
-using Combinatorics
 include("DOPF_Constraints.jl")
 include("DOPF_NB.jl")
-include("CCG_DOPF.jl")
+include("Innovations/CCG_DOPF.jl")
 
 function Create_Contingency_Maps(grid::PowerGrid, types::Array; include_leafs=false, k=1, converter_modularization=:continuous)
 
     """
     This is a helper function that creates vectors of binary constants to simulate contingencies.
     `types` -> could be any subset of `[:ac_branch, :dc_branch, :dc_link, :ac_gen, :dc_gen, :conv, :coupler]`
-    `include_leafs` -> whether to include leafs in contingencies or no. If you have leafs in your grid, expect that it will not be N-1 secure
+    `include_leafs` -> whether to include leafs in contingencies or no. If you have leafs in your grid, expect that it will not be N-1 secure, but setting this parameter to `false` will disregard these branches
     """
 
     exception_ac_branches = []
@@ -700,7 +699,7 @@ end
 
 function run_DOPF_simulation!(grid::PowerGrid, simulation_settings::DOPF_SimulationSettings,
     prerequisites_data::DOPF_Prerequisites, virtual_market::PowerMarket; update_grid=true)
-    return clear_market!(virtual_market, grid, prerequisites_data.Order_Book, simulation_settings,
+    return clear_market!(virtual_market, grid, deepcopy(prerequisites_data.Order_Book), simulation_settings,
         prerequisites_data; update_grid=update_grid)
 end
 
@@ -1313,13 +1312,20 @@ function clear_market!(market::PowerMarket, grid::PowerGrid, order_book::OrderBo
             if JuMP.has_duals(dual_model)
                 μ_t = Dict()
                 opex = Dict()
+                lmp_t = Dict()
                 for t in prerequisites_data.time_horizon
                     push!(μ_t, t => sum([JuMP.dual(dual_model[:single_node_balance][k,t]) for k in prerequisites_data.k_t[t]], init=0))
                     push!(opex, t => calculate_opex_t(dual_model,grid,prerequisites_data,t))
+                    lmp_i = Dict()
+                    for i in prerequisites_data.ac_node_ids
+                        push!(lmp_i, i => sum(dual(dual_model[:ac_active_nodal_balance][i, k, t]) for k in prerequisites_data.k_t[t]))
+                    end
+                    push!(lmp_t, t => lmp_i)
                 end
 
                 prerequisites_data.Order_Book.μ_t = deepcopy(μ_t)
                 prerequisites_data.Order_Book.Opex = deepcopy(opex)
+                prerequisites_data.Order_Book.λ_i_t = deepcopy(lmp_t)
                 prerequisites_data.time_horizon = simulation_settings.time_horizon
                 settle_order_book!(grid, prerequisites_data)
                 update_original_order_book!(order_book, prerequisites_data)
@@ -1430,7 +1436,29 @@ function clear_market!(market::PowerMarket, grid::PowerGrid, order_book::OrderBo
 
             model, solved_flag = OPF_Model!(grid, simulation_settings, prerequisites_data, order_book ; update_grid=update_grid)
         
+
             if solved_flag
+
+                if JuMP.has_duals(model)
+                    lmp_line = Dict()
+                    for line_id in keys(grid.Branches)
+                        if line_id in prerequisites_data.relaxed_capacity_lines
+                            push!(lmp_line, line_id => 0)
+                        else
+                            a = sum(dual(model[:ac_active_flow_limits][line_id, 1, k, t]) for k in prerequisites_data.k_t[t])
+                            b = sum(dual(model[:ac_active_flow_limits][line_id, 2, k, t]) for k in prerequisites_data.k_t[t])
+                            push!(lmp_line, line_id => maximum([abs(a),abs(b)])) 
+                        end
+                    end
+
+                    lmp_node = Dict()
+                    for node_id in keys(grid.Buses)
+                        push!(lmp_node, node_id => sum(dual(model[:ac_active_nodal_balance][node_id, k, t]) for k in prerequisites_data.k_t[t]))
+                    end
+                    push!(grid.Line_Duals, t => lmp_line)
+                    push!(grid.Bus_Duals, t => lmp_node)
+                end
+
                 objective_value = JuMP.objective_value(model)
                 dual_model, solved_flag_relaxed = Fixed_SCOPF_Model!(model, grid, simulation_settings, prerequisites_data, order_book)
                 
@@ -1488,6 +1516,27 @@ function clear_market!(market::PowerMarket, grid::PowerGrid, order_book::OrderBo
             model, solved_flag = SCOPF_Model!(grid, simulation_settings, prerequisites_data, order_book ; update_grid=update_grid)
         
             if solved_flag
+
+                if JuMP.has_duals(model)
+                    lmp_line = Dict()
+                    for line_id in keys(grid.Branches)
+                        if line_id in prerequisites_data.relaxed_capacity_lines
+                            push!(lmp_line, line_id => 0)
+                        else
+                            push!(lmp_line, line_id => sum(dual(model[:ac_active_flow_limits][line_id, 1, k, t]) for k in prerequisites_data.k_t[t]))
+                        end
+                    end
+
+                    lmp_node = Dict()
+                    for node_id in keys(grid.Buses)
+                        a = sum(dual(model[:ac_active_flow_limits][line_id, 1, k, t]) for k in prerequisites_data.k_t[t])
+                        b = sum(dual(model[:ac_active_flow_limits][line_id, 2, k, t]) for k in prerequisites_data.k_t[t])
+                        push!(lmp_line, line_id => maximum([abs(a),abs(b)])) 
+                    end
+                    push!(grid.Line_Duals, t => lmp_line)
+                    push!(grid.Bus_Duals, t => lmp_node)
+                end
+
                 objective_value = JuMP.objective_value(model)
                 dual_model, solved_flag_relaxed = Fixed_SCOPF_Model!(model, grid, simulation_settings, prerequisites_data, order_book)
                 

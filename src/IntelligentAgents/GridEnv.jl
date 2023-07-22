@@ -9,7 +9,7 @@ abstract type Environment end
     n_actions::Int64
 end
 
-function OPF_ENV_init!(grid::PowerGrid, agent_type::Symbol, prerequisites::OPF_Prerequisites, simulation_settings::OPF_SimulationSettings)
+function OPF_ENV_init!(grid::PowerGrid, agent_type::Symbol, prerequisites::DOPF_Prerequisites, simulation_settings::DOPF_SimulationSettings)
 
     if agent_type == :DDPG
         state_size = 2 * grid.N_bus
