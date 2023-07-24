@@ -1,2 +1,5 @@
 /Manifest.toml
 .vscode/
+src/GraphPartitioning/QA/api_key.json
+
+*__pycache__/
