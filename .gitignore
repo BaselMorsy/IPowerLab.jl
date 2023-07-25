@@ -2,7 +2,7 @@
 .vscode/
 
 # API KEY to D-Wave
-src/GraphPartitioning/QA/api_key.json
+src/Analysis/SteadyState/DeterministicAnalysis/Innovations/GraphPartitioning/QA/api_key.json
 
 # All __pycache__ directories
 *__pycache__/
