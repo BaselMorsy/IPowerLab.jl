@@ -8,6 +8,7 @@ function build_DOPF_SP!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSett
     prerequisites_data_instance.time_horizon = [t]
     prerequisites_data_instance.k_t[t] = [k]
 
+    x = 1
     # Fixing schedules and emptying commitable/non-commitable gen lists:
     # p_gen_ac = JuMP.value.(solved_MP_model[:p_gen_ac][:,1,t])
     if k ∉ prerequisites_data_instance.contingency_redispatch
