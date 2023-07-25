@@ -8,16 +8,50 @@ function build_DOPF_SP!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSett
     prerequisites_data_instance.time_horizon = [t]
     prerequisites_data_instance.k_t[t] = [k]
 
-    # # Fixing schedules and emptying commitable/non-commitable gen lists:
+    # Fixing schedules and emptying commitable/non-commitable gen lists:
     # p_gen_ac = JuMP.value.(solved_MP_model[:p_gen_ac][:,1,t])
-    # fixed_schedules = Dict()
-    # for g in prerequisites_data.ac_gen_ids
-    #     push!(fixed_schedules, )
-    # # Fixing relevant topology:
-    # if SimulationSettings.
+    if k ∉ prerequisites_data_instance.contingency_redispatch
+        fixed_schedules = Dict()
+        for g in prerequisites_data_instance.ac_gen_ids
+            push!(fixed_schedules, g => Dict(t => JuMP.value(solved_MP_model[:p_gen_ac][g,1,t])))
+        end
+    end
+    prerequisites_data_instance.fixed_schedules = fixed_schedules
+    prerequisites_data_instance.commitable_gen_ids = []
+    prerequisites_data_instance.non_commitable_gen_ids = []
+    prerequisites_data_instance.fixed_commitments = Dict()
+    
+    # Fixing relevant topology:
+    fixed_topology = Dict()
+
+    if SimulationSettings.transmission_switching == [:pre] && length(prerequisites_data_instance.ac_active_dynamic_branch_ids) != 0
+        prerequisites_data_instance.ac_fixed_dynamic_branch_ids = prerequisites_data_instance.ac_active_dynamic_branch_ids
+        prerequisites_data_instance.ac_active_dynamic_branch_ids = []
+        for branch_id in prerequisites_data_instance.ac_fixed_dynamic_branch_ids
+            push!(fixed_topology, branch_id => Dict(k => Dict(t => JuMP.value(solved_MP_model[:z_l][branch_id, k, t]))))
+        end
+    end
+
+    if SimulationSettings.substation_switching["splitting"] == [:pre] && length(prerequisites_data_instance.ac_active_coupler_ids) != 0
+        prerequisites_data_instance.ac_fixed_coupler_ids = prerequisites_data_instance.ac_active_coupler_ids
+        prerequisites_data_instance.ac_active_coupler_ids = []
+        for branch_id in prerequisites_data_instance.ac_fixed_coupler_ids
+            push!(fixed_topology, branch_id => Dict(k => Dict(t => JuMP.value(solved_MP_model[:z_c][branch_id, k, t]))))
+        end
+    end
+
+    if SimulationSettings.substation_switching["reconf"] == [:pre] && length(prerequisites_data_instance.ac_active_reconf_ids) != 0
+        prerequisites_data_instance.ac_fixed_reconf_ids = prerequisites_data_instance.ac_active_reconf_ids
+        prerequisites_data_instance.ac_active_reconf_ids = []
+        for branch_id in prerequisites_data_instance.ac_fixed_reconf_ids
+            push!(fixed_topology, branch_id => Dict(k => Dict(t => JuMP.value(solved_MP_model[:z_r][branch_id, k, t]))))
+        end
+    end
+
+    prerequisites_data_instance.fixed_topology = fixed_topology
 
     # Building model:
-
+    return build_snapshot_DOPF_model!(grid, SimulationSettings, prerequisites_data_instance, k=k)
 end
 
 function solve_decomposed_model!(model::Model)
@@ -55,7 +89,7 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
         t_master_now = @elapsed solved_MP_model = solve_decomposed_model!(MP_model)
         push!(t_master, t_master_now)
 
-        LB_t = [calculate_opex_t(solved_MP_model,grid, prerequisites_data, t; include_load_shedding=true) for t in T]
+        LB_t = [calculate_opex_t(solved_MP_model,grid, prerequisites_data, t; include_load_shedding=false, include_commitment_cost=false) for t in T]
 
         UB_tk = zeros(length(T), length(K_all))
 

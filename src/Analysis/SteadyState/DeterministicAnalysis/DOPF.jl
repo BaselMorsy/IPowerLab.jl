@@ -1177,6 +1177,48 @@ function build_full_DOPF_model!(grid::PowerGrid, SimulationSettings::DOPF_Simula
     return model
 end
 
+function build_snapshot_DOPF_model!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites; k=1)
+
+    # Model initialization
+    model = Model(solver)
+
+    DOPF_variable_initialization!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_nodal_balance_ac_node!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_powerflow_ac_branch_static!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_thermal_limits_ac_branch_static!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_powerflow_ac_branch_dynamic!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_thermal_limits_ac_branch_dynamic!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_substation_switching_ac_node!(model, grid, SimulationSettings, prerequisites_data)    
+    DOPF_generator_limits_ac_node!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_load_shedding_limits_ac_node!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_voltage_limits_ac_node!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_angle_limits_ac_node!(model, grid, SimulationSettings, prerequisites_data) 
+    DOPF_converter_flow!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_converter_capacity!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_nodal_balance_dc_node!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_powerflow_dc_branch_static!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_thermal_limits_dc_branch_static!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_powerflow_dc_link!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_thermal_limits_dc_link!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_voltage_limits_dc_node!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_generator_limits_dc_node!(model, grid, SimulationSettings, prerequisites_data)
+    if length(keys(prerequisites_data.fixed_schedules)) != 0
+        DOPF_schedule_fixes!(model, grid, SimulationSettings, prerequisites_data; k=k)
+    end
+    if length(keys(prerequisites_data.fixed_topology)) != 0
+        DOPF_substation_switching_ac_node_fixed!(model, grid, SimulationSettings, prerequisites_data)
+        DOPF_powerflow_ac_branch_dynamic_fixed!(model, grid, SimulationSettings, prerequisites_data)
+        DOPF_thermal_limits_ac_branch_dynamic_fixed!(model, grid, SimulationSettings, prerequisites_data)
+        DOPF_topology_fixes!(model, grid, SimulationSettings, prerequisites_data)
+    end
+    if length(keys(prerequisites_data.fixed_commitments)) != 0
+        DOPF_commitment_fixes!(model, grid, SimulationSettings, prerequisites_data)
+    end
+    DOPF_objective_function!(model, grid, SimulationSettings, prerequisites_data)
+ 
+    return model
+end
+
 function optimize_DOPF_model!(model::Model, grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites,
     order_book::OrderBook; update_grid=false, update_order_book=false)
 
@@ -1229,27 +1271,30 @@ function optimize_DOPF_model!(model::Model, grid::PowerGrid, SimulationSettings:
     end
 end
 
-function calculate_opex_t(model::Model,grid::PowerGrid, prerequisites_data::DOPF_Prerequisites, t; include_load_shedding=true)
+function calculate_opex_t(model::Model,grid::PowerGrid, prerequisites_data::DOPF_Prerequisites, t; include_load_shedding=true, include_commitment_cost=true)
     if t ∉ prerequisites_data.time_horizon
         error("Selected time instance ($t) is out of bounds")
     else
         GenBids = prerequisites_data.Order_Book.Gen_bids
         LoadBids = prerequisites_data.Order_Book.Load_bids
         
-        val_p_gen_ac_non_commitable = sum([JuMP.value.(model[:p_gen_ac])[g,1,t]*GenBids[g]["price"][t][1] for g in prerequisites_data.non_commitable_gen_ids], init=0)
-        val_p_gen_ac_commitable = sum([JuMP.value.(model[:p_gen_ac])[g,1,t]*GenBids[g]["price"][t][1] + grid.Generators[g].C0*JuMP.value.(model[:u_gt])[g,t]+JuMP.value.(model[:α_gt])[g,t]*grid.Generators[g].start_up_cost+JuMP.value.(model[:β_gt])[g,t]*grid.Generators[g].shut_down_cost for g in prerequisites_data.commitable_gen_ids], init=0)
-        val_p_gen_ac_fixed_commitment = sum([JuMP.value.(model[:p_gen_ac])[g,1,t]*GenBids[g]["price"][t][1] for g in keys(prerequisites_data.fixed_commitments)], init=0)
-        val_p_gen_ac_fixed_schedule = sum([JuMP.value.(model[:p_gen_ac])[g,1,t]*GenBids[g]["price"][t][1] for g in keys(prerequisites_data.fixed_schedules)], init=0)
+        val_p_gen_ac = sum([JuMP.value.(model[:p_gen_ac])[g,1,t]*GenBids[g]["price"][t][1] for g in prerequisites_data.ac_gen_ids], init=0)
+        val_commitment = sum([grid.Generators[g].C0*JuMP.value.(model[:u_gt])[g,t]+JuMP.value.(model[:α_gt])[g,t]*grid.Generators[g].start_up_cost+JuMP.value.(model[:β_gt])[g,t]*grid.Generators[g].shut_down_cost for g in prerequisites_data.commitable_gen_ids], init=0)
+        
         val_p_gen_dc = sum([JuMP.value.(model[:p_gen_dc])[g,1,t]*grid.DCGenerators[g].C1 for g in prerequisites_data.dc_gen_ids], init=0)
         val_p_load_shedding = sum([JuMP.value.(model[:p_ls_ac])[d,k,t]*LoadBids[d]["price"][t] for d  in prerequisites_data.ac_load_shedding_ids, k in prerequisites_data.k_t[t]], init=0)
-        sum_without_ls = val_p_gen_ac_non_commitable+val_p_gen_ac_commitable+val_p_gen_ac_fixed_commitment+val_p_gen_ac_fixed_schedule+val_p_gen_dc
-        sum_with_ls = sum_without_ls+val_p_load_shedding
+        
+        total = val_p_gen_ac + val_p_gen_dc
+
+        if include_commitment_cost
+            total += val_commitment
+        end
 
         if include_load_shedding
-            return sum_with_ls
-        else
-            return sum_without_ls
+            total += val_p_load_shedding
         end
+
+        return total
     end
 end
 

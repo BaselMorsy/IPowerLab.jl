@@ -875,11 +875,11 @@ function DOPF_transition_constraints!(model::Model, grid ::PowerGrid, simulation
 
 end
 
-function DOPF_schedule_fixes!(model::Model, grid ::PowerGrid, simulation_settings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites)
+function DOPF_schedule_fixes!(model::Model, grid ::PowerGrid, simulation_settings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites; k=1)
     if length(keys(prerequisites_data.fixed_schedules)) != 0
         if simulation_settings.ac_grid_model == :Bθ
             JuMP.@constraint(model, fixed_ac_gen_schedule[g in keys(prerequisites_data.fixed_schedules), t in prerequisites_data.time_horizon], 
-                model[:p_gen_ac][g,1,t] == prerequisites_data.fixed_schedules[g][t])
+                model[:p_gen_ac][g,k,t] == prerequisites_data.fixed_schedules[g][t])
         elseif simulation_settings.ac_grid_model == :AC
         end
     end
