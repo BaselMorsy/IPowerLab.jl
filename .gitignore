@@ -1,2 +1,8 @@
 /Manifest.toml
 .vscode/
+
+# API KEY to D-Wave
+src/Analysis/SteadyState/DeterministicAnalysis/Innovations/GraphPartitioning/QA/api_key.json
+
+# All __pycache__ directories
+*__pycache__/
