@@ -1,51 +1,178 @@
 include("Components/Components.jl")
 include("Ybus.jl")
 
+cases_dir = abspath(joinpath(@__DIR__, "..", "test", "Systems"))
+AC_dir = joinpath(cases_dir, "pglib-opf", "benchmark_cases")
+ACDC_dir = joinpath(cases_dir, "ACDC")
+UC_dir = joinpath(cases_dir, "AC_UC")
+
+
+function BuildGrid(Sbase,LineData,BusData,GenData)
+    """
+    Soon will be removed!
+    """
+    Y_bus = []
+    b_line = []
+    Buses = Dict()
+    Branches = Dict()
+    Loads = Dict()
+    Generators = Dict()
+
+    gens_at_bus = Dict()
+    branches_at_bus = Dict()
+
+    switch_counter = 0
+    branch_counter = 0
+    bus_counter = 0
+    load_counter = 0
+    gen_counter = 0
+
+    N_bus = []
+    N_gen = []
+    N_load = []
+    N_branch = []
+    N_switch = []
+
+    if LineData != []
+        N_bus = length(unique!(vcat(unique!(Vector(LineData[!,:fbus])),unique!(Vector(LineData[!,:tbus])))))
+        Y_bus,b_line = Y_Bus(LineData,N_bus)
+
+        for line in eachrow(LineData)
+            objtyp = 2
+            branch_counter += 1
+            switch_counter += 1
+            new_switch = Switch(SwitchID=switch_counter,Switch_ObjID=(objtyp,line[:ID]))
+            new_line = Branch(LineID=line[:ID],Fr_bus_ID=line[:fbus],To_bus_ID=line[:tbus],
+                BranchType=0,GeneralSwitch=new_switch,r=line[:r],x=line[:x],b=line[:b],
+                rating=line[:rate])
+            push!(Branches,line[:ID]=>new_line)
+
+            if new_line.Fr_bus_ID in keys(branches_at_bus)
+                push!(branches_at_bus[new_line.Fr_bus_ID],new_line.LineID)
+            else
+                push!(branches_at_bus,new_line.Fr_bus_ID=>[new_line.LineID])
+            end
+
+            if new_line.To_bus_ID in keys(branches_at_bus)
+                push!(branches_at_bus[new_line.To_bus_ID],new_line.LineID)
+            else
+                push!(branches_at_bus,new_line.To_bus_ID=>[new_line.LineID])
+            end
+        end
+
+    end
+    
+    if GenData != []
+        for gen in eachrow(GenData)
+            objtyp = 3
+            gen_counter += 1
+            switch_counter += 1
+            new_switch = Switch(SwitchID=switch_counter,Switch_ObjID=(objtyp,gen_counter))
+            new_gen = Generator(GenID=gen_counter,GenBus_ID=gen[:bus],GeneralSwitch=new_switch,C0=gen[:C0],C1=gen[:C1],C2=gen[:C2],
+                Pg_max=gen[:Pmax],Pg_min=gen[:Pmin],Qg_max=gen[:Qmax],Qg_min=gen[:Qmin])
+            push!(Generators,gen_counter=>new_gen)
+
+            if new_gen.GenBus_ID in keys(gens_at_bus)
+                push!(gens_at_bus[new_gen.GenBus_ID],new_gen.GenID)
+            else
+                push!(gens_at_bus,new_gen.GenBus_ID=>[new_gen.GenID])
+            end
+
+        end
+
+    end
+
+    if BusData != []
+        
+        for bus in eachrow(BusData)
+            switch_counter +=1
+            bus_counter +=1
+            load_counter +=1
+            objtyp = 1
+            new_switch = Switch(SwitchID=switch_counter,Switch_ObjID=(objtyp,bus[:bus_i]))
+            new_load = Load(LoadID=bus[:bus_i],LoadBus_ID=bus[:bus_i],Pd=bus[:Pd],Qd=bus[:Qd],Shedding_Cost=1e4, Pd_t=[bus[:Pd]])
+            new_bus = Bus(BusID=bus[:bus_i],GeneralSwitch=new_switch,V_max=bus[:Vmax],V_min=bus[:Vmin])
+            
+            if new_bus.BusID in keys(branches_at_bus)
+                new_bus.ConnectedLinesIDs = branches_at_bus[new_bus.BusID]
+            end
+
+            new_bus.ConnectedLoadsIDs = [new_load.LoadID]
+
+            if new_bus.BusID in keys(gens_at_bus)
+                new_bus.ConnectedGensIDs = gens_at_bus[new_bus.BusID]
+            end
+
+            push!(Buses, bus[:bus_i]=>new_bus)
+            push!(Loads,bus[:bus_i]=>new_load)
+        end
+    end
+
+    N_gen = gen_counter
+    N_load = load_counter
+    N_branch = branch_counter
+    N_switch = switch_counter
+
+    grid = PowerGrid(GridID=1,Areas=1)
+    grid.Buses = Buses
+    grid.Loads = Loads
+    grid.Branches = Branches
+    grid.Generators = Generators
+
+    grid.N_bus = N_bus
+    grid.N_gen = N_gen
+    grid.N_load = N_load
+    grid.N_branch = N_branch
+    grid.N_switch = N_switch
+
+    grid.Y_bus =  Y_bus
+    grid.b_line = b_line
+    grid.S_base = Sbase
+
+   return grid
+end
+
 function show_cases(verbose; type=:AC_cases)
 
     """
     type: could be :AC_cases for pglib_opf benchmark cases,
         or :ACDC_cases for hybrid benchmark systems, or :UC_cases for unit commitment cases
     """
-    
-    lst_dir = abspath(joinpath(@__DIR__, ".."))
+
     if type == :AC_cases
-        lst = readdir(string(lst_dir,"\\test\\Systems\\pglib-opf\\benchmark_cases"))
+        cases = readdir(AC_dir)
     elseif type == :ACDC_cases
-        lst = readdir(string(lst_dir,"\\test\\Systems\\ACDC"))
+        cases = readdir(ACDC_dir)
     elseif type == :UC_cases
-        lst = readdir(string(lst_dir,"\\test\\Systems\\AC_UC"))
-        if length(lst) == 0
+        cases = readdir(UC_dir)
+        if length(cases) == 0
             println("No UC cases downloaded, please use `download_UC_case(case_name::string; date::string)`")
         end
     end
 
     if verbose
-        for i in 1:length(lst)
-            println("[INFO] ", lst[i]," - ", i)
+        for (i, case) in enumerate(cases)
+            println("[INFO] ", case," - ", i)
         end
     end
-    return lst
+    return cases
 end
 
 function load_system(case_id; type=:AC_cases, date="2017-02-18")
     """
     date: only relevant for UC_cases. Use a date of a downloaded case
     """
-    lst_dir = abspath(joinpath(@__DIR__, ".."))
-    lst = show_cases(false, type=type)
-    CASE_NAME= lst[case_id]
-
+    
+    CASE_NAME = show_cases(false, type=type)[case_id]
+    
     if type == :AC_cases
-        CASE_DIR = string(lst_dir,"\\test\\Systems\\pglib-opf\\benchmark_cases")
-        m_file_path = joinpath(CASE_DIR, CASE_NAME)
-        return parse_matpower_case(m_file_path; start_node_from_1=true)
+        return parse_matpower_case(joinpath(AC_dir, CASE_NAME);
+                 start_node_from_1=true)
     elseif type == :ACDC_cases
-        CASE_DIR = string(lst_dir,"\\test\\Systems\\ACDC")
-        m_file_path = joinpath(CASE_DIR, CASE_NAME)
-        return parse_matpower_case(m_file_path; start_node_from_1=true)
+        return parse_matpower_case(joinpath(ACDC_dir, CASE_NAME);
+                 start_node_from_1=true)
     elseif type == :UC_cases
-        CASE_DIR = string(lst_dir,"\\test\\Systems\\AC_UC")
+        CASE_DIR = UC_dir
         json_grid_file_path = joinpath(joinpath(CASE_DIR, CASE_NAME), date*".json.gz")
         std_case_lst = show_cases(false, type=:AC_cases)
         standard_case_name = []
