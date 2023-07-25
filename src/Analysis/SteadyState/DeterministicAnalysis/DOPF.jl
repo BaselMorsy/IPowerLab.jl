@@ -1,6 +1,5 @@
 include("DOPF_Constraints.jl")
 include("DOPF_NB.jl")
-include("Innovations/CCG_DOPF.jl")
 
 function Create_Contingency_Maps(grid::PowerGrid, types::Array; include_leafs=false, k=1, converter_modularization=:continuous)
 
@@ -1765,7 +1764,7 @@ function SCOPF_Model!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSettin
         solution_status = optimize_DOPF_model!(model, grid, SimulationSettings, prerequisites_data, order_book; update_grid=update_grid, update_order_book=true)
         return model, solution_status
     elseif SimulationSettings.Meta_solver == :CCG
-
+        
     end
 end
 
