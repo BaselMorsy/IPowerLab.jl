@@ -44,8 +44,8 @@ function calculate_line_profits_from_PF(grid::PowerGrid, power_flow_dict::Dict, 
 
     for row in eachrow(profits_pre_switching)
         branch_id = row[:line_id]
-        flow = Pl[branch_id][1]
-        utilization = abs(Pl[branch_id][2])
+        flow = power_flow_dict[branch_id][1]
+        utilization = abs(power_flow_dict[branch_id][2])
 
         fr_ = splitting_grid.Branches[branch_id].Fr_bus_ID
         to_ = splitting_grid.Branches[branch_id].To_bus_ID
