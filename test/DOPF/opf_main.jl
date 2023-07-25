@@ -7,18 +7,25 @@ using Plots
 
 type=:AC_cases
 lst = show_cases(true; type=type)
-case_id = 3
+case_id = 8
 date="2017-02-18"
-grid = load_system(case_id; type=type, date=date)
+grid = load_system(case_id; type=type, date=date, start_node_from_1=true)
 
+grid.Branches[1]
+loads = [grid.Loads[l].Pd_t[1] for l in keys(grid.Loads)]
+sum(loads)
+
+gen_cap = [grid.Generators[g].Pg_max for g in keys(grid.Generators)]
+gen_min_cap = [grid.Generators[g].Pg_min for g in keys(grid.Generators)]
+sum(gen_cap) ≥ sum(loads)
 # for visualization, although it's poor now, but his will be dealt with later
-Plot_PowerGrid(grid; node_size=0.2,font_size=3)
+Plot_PowerGrid(grid; node_size=0.1,font_size=1)
 
 time_horizon = [1]
 
 SimulationSettings = DOPF_SimulationSettings(time_horizon = time_horizon,
     ac_grid_model = :Bθ,
-    load_shedding = [:post], # if empty then no load shedding is allowed at all
+    load_shedding = [:pre], # if empty then no load shedding is allowed at all
     transmission_switching = [:post], # if empty then TS will be utilized pre and post contingencies
     substation_switching = Dict("splitting" => [:post], "reconf" => [:pre]),
     activate_temporal_switching = false, # to impose switching frequency constraints
@@ -48,15 +55,26 @@ switching_specs = Dict("substation_ids" => S, "hybrid_substation_ids" => H, "B2B
 compile_grid_topology!(grid, SimulationSettings, switching_specs)
 
 all_gen_ids = [gen_id for gen_id in keys(grid.Generators) if grid.Generators[gen_id].GenType != :virtual]
-contingency_specs = Dict("include_leafs" => true, "k" => 1)
+contingency_specs = Dict("include_leafs" => true, "k" => 0)
 generation_specs = Dict("commitable_gen_ids" => [], "non_commitable_gen_ids" => all_gen_ids, "fixed_commitments" => Dict(), "fixed_schedules" => Dict())
-reference_node = 69
+reference_node = nothing
 simulation_type = :OPF
 prerequisites, virtual_market = compile_prerequisites_DOPF_no_market!(grid, simulation_type, SimulationSettings, contingency_specs, switching_specs,
     generation_specs; relaxed_physics_lines=[], relaxed_physics_nodes=[], relaxed_capacity_lines=[],reference_node=reference_node)
 
 run_DOPF_simulation!(grid, SimulationSettings, prerequisites, virtual_market; update_grid=true)
 
+shedding = [grid.Loads[d].P_shedding_tk[1][1] for d in keys(grid.Loads)]
+sum(shedding)
+
+model = DOPF_single_node_model!(grid, SimulationSettings, prerequisites)
+
+model[:single_node_balance]
+model[:no_load_shedding_at_all]
+model[:load_shedding_limits]
+
+grid.Buses[68]
+grid.Loads[68].Pd_t[1]
 update_grid_tables_DOPF!(grid; t=1, k=1)
 
 println(grid.BusData_output)

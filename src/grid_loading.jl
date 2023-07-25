@@ -158,7 +158,7 @@ function show_cases(verbose; type=:AC_cases)
     return cases
 end
 
-function load_system(case_id; type=:AC_cases, date="2017-02-18")
+function load_system(case_id; type=:AC_cases, date="2017-02-18", start_node_from_1=true)
     """
     date: only relevant for UC_cases. Use a date of a downloaded case
     """
@@ -167,10 +167,10 @@ function load_system(case_id; type=:AC_cases, date="2017-02-18")
     
     if type == :AC_cases
         return parse_matpower_case(joinpath(AC_dir, CASE_NAME);
-                 start_node_from_1=true)
+                 start_node_from_1=start_node_from_1)
     elseif type == :ACDC_cases
         return parse_matpower_case(joinpath(ACDC_dir, CASE_NAME);
-                 start_node_from_1=true)
+                 start_node_from_1=start_node_from_1)
     elseif type == :UC_cases
         CASE_DIR = UC_dir
         json_grid_file_path = joinpath(joinpath(CASE_DIR, CASE_NAME), date*".json.gz")

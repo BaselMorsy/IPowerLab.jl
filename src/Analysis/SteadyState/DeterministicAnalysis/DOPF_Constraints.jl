@@ -499,8 +499,11 @@ end
 
 function DOPF_load_shedding_limits_ac_node!(model::Model, grid ::PowerGrid, simulation_settings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites)
     if simulation_settings.ac_grid_model == :Bθ
-        JuMP.@constraint(model, load_shedding_limits[d in prerequisites_data.ac_load_shedding_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+        JuMP.@constraint(model, load_shedding_limits_up[d in prerequisites_data.ac_load_shedding_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t] && prerequisites_data.Order_Book.Load_bids[d]["qty"][t] ≥ 0 ],
             0 ≤ model[:p_ls_ac][d,k,t] ≤ prerequisites_data.Order_Book.Load_bids[d]["qty"][t])
+
+        JuMP.@constraint(model, load_shedding_limits_down[d in prerequisites_data.ac_load_shedding_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t] && prerequisites_data.Order_Book.Load_bids[d]["qty"][t] ≤ 0],
+            prerequisites_data.Order_Book.Load_bids[d]["qty"][t] ≤ model[:p_ls_ac][d,k,t] ≤ 0)
     elseif simulation_settings.ac_grid_model == :AC
         if length(prerequisites_data.ac_load_shedding_ids) != 0
         else

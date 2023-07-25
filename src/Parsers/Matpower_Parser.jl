@@ -174,13 +174,14 @@ function _create_grid_from_raw_data(bus_data_raw,gen_data_raw,branch_data_raw,dc
                 ac_node_id_in_grid += 1
                 push!(ac_node_map, Int64(data[1]) => ac_node_id_in_grid)
                 add_bus!(grid,ac_node_id_in_grid, V_max=data[12],V_min=data[13],δ_max=0.6,δ_min=-0.6)
-                add_load!(grid,ac_node_id_in_grid, data[3],data[4])
+                add_load!(grid,ac_node_id_in_grid, data[3],data[4]; Shedding_Cost=sign(data[3])*1000)
         else
                 add_bus!(grid,Int64(data[1]), V_max=data[12],V_min=data[13],δ_max=0.6,δ_min=-0.6)
-                add_load!(grid,Int64(data[1]), data[3],data[4])
+                add_load!(grid,Int64(data[1]), data[3],data[4]; Shedding_Cost=sign(data[3])*1000)
         end 
         # grid.Loads[grid.N_load].Pd_t = [data[3]]
     end
+
     # add DC Buses
     for row in eachrow(dc_bus_data_raw)
         data = row[1] #  busdc_i grid    Pdc     Vdc     basekVdc    Vdcmax  Vdcmin  Cdc
@@ -256,9 +257,11 @@ function _create_grid_from_raw_data(bus_data_raw,gen_data_raw,branch_data_raw,dc
         end
      end
 
-    Y_bus,b_line = Y_Bus_Grid(grid)
-    grid.Y_bus = Y_bus
-    grid.b_line = b_line
+     if start_node_from_1
+        Y_bus,b_line = Y_Bus_Grid(grid)
+        grid.Y_bus = Y_bus
+        grid.b_line = b_line
+     end
 
     return grid
 end
