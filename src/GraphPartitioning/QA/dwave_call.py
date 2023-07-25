@@ -29,6 +29,9 @@ def sample_qubo(
     elif solver == "random":
         sampler = dimod.RandomSampler()
     
+    elif solver == "exact":
+        sampler = dimod.ExactSolver()
+    
     else:
         raise ValueError(f"Invalid solver {solver}")
     
