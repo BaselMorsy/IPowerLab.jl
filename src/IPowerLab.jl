@@ -12,6 +12,6 @@ module IPowerLab
     include("Parsers/UC_case_parser.jl")
     include("GridVisualization/visualize.jl")
     # include("IntelligentAgents/Jim.jl")
-
+    
     @exportPublic()
 end
