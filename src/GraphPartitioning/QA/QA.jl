@@ -17,4 +17,11 @@ sample_qubo = pyimport("src.GraphPartitioning.QA.dwave_call").sample_qubo
 
 qubo_matrix = [[-1 0 3]; [0 2 1]; [ 0 0 -0.5]]
 
-sample_qubo(qubo_matrix)
+using Random, Distributions
+random_qubo = randn( Float64, (100, 100))
+maximum(random_qubo)
+
+result = sample_qubo(random_qubo, solver = "qpu")
+
+classic_result = sample_qubo(random_qubo, solver = "simulated_annealing")
+
