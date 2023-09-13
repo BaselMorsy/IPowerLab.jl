@@ -1567,15 +1567,15 @@ function clear_market!(market::PowerMarket, grid::PowerGrid, order_book::OrderBo
                         if line_id in prerequisites_data.relaxed_capacity_lines
                             push!(lmp_line, line_id => 0)
                         else
-                            push!(lmp_line, line_id => sum(dual(model[:ac_active_flow_limits][line_id, 1, k, t]) for k in prerequisites_data.k_t[t]))
+                            a = sum(dual(model[:ac_active_flow_limits][line_id, 1, k, t]) for k in prerequisites_data.k_t[t])
+                            b = sum(dual(model[:ac_active_flow_limits][line_id, 2, k, t]) for k in prerequisites_data.k_t[t])
+                            push!(lmp_line, line_id => maximum([abs(a),abs(b)])) 
                         end
                     end
 
                     lmp_node = Dict()
                     for node_id in keys(grid.Buses)
-                        a = sum(dual(model[:ac_active_flow_limits][line_id, 1, k, t]) for k in prerequisites_data.k_t[t])
-                        b = sum(dual(model[:ac_active_flow_limits][line_id, 2, k, t]) for k in prerequisites_data.k_t[t])
-                        push!(lmp_line, line_id => maximum([abs(a),abs(b)])) 
+                        push!(lmp_node, node_id => sum(dual(model[:ac_active_nodal_balance][node_id, k, t]) for k in prerequisites_data.k_t[t]))
                     end
                     push!(grid.Line_Duals, t => lmp_line)
                     push!(grid.Bus_Duals, t => lmp_node)
