@@ -912,6 +912,11 @@ function DOPF_commitment_fixes!(model::Model, grid ::PowerGrid, simulation_setti
     end
 end
 
+function DOPF_load_shedding_WCS!(model::Model, grid ::PowerGrid, simulation_settings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites)
+    # TODO: Add this to the workflow
+    JuMP.@constraint(model, gamma_limit[k ∈ prerequisites_data.k, t ∈ prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]], model[:Γ][t] ≥ sum([model[:p_ls_ac][d,k,t]*LoadBids[d]["price"][t][1] for d  in prerequisites_data.ac_load_shedding_ids], init=0))
+end
+
 function DOPF_objective_function!(model::Model, grid ::PowerGrid, simulation_settings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites)
     # non_commitable_gen costs + commitable_gen costs + fixed_commitment_gen costs + fixed_schedule_gen costs + load_shedding costs + dc_gen cost
     GenBids = prerequisites_data.Order_Book.Gen_bids

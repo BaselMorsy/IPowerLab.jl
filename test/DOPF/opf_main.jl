@@ -5,9 +5,9 @@ using Gurobi
 using JuMP
 using Plots
 
-type=:AC_cases
+type=:ACDC_cases
 lst = show_cases(true; type=type)
-case_id = 8
+case_id = 14
 date="2017-02-18"
 grid = load_system(case_id; type=type, date=date, start_node_from_1=true)
 
@@ -25,7 +25,7 @@ time_horizon = [1]
 
 SimulationSettings = DOPF_SimulationSettings(time_horizon = time_horizon,
     ac_grid_model = :Bθ,
-    load_shedding = [:pre], # if empty then no load shedding is allowed at all
+    load_shedding = [:post], # if empty then no load shedding is allowed at all
     transmission_switching = [:post], # if empty then TS will be utilized pre and post contingencies
     substation_switching = Dict("splitting" => [:post], "reconf" => [:pre]),
     activate_temporal_switching = false, # to impose switching frequency constraints
@@ -33,7 +33,7 @@ SimulationSettings = DOPF_SimulationSettings(time_horizon = time_horizon,
     max_substation_reconf = Dict("MCDT" => 1),
     max_busbar_splitting = Dict("pre_contingency" => Inf, "post_contingency" => Inf, "MCDT" => 1),
 
-    contingency_types = [:ac_branch, :coupler], # all possibilities will be explained in documentation
+    contingency_types = [:ac_branch, :coupler, :conv], # all possibilities will be explained in documentation
     contingency_redispatch_condition = :loss_of_generation,
 
     NLP_solver = Ipopt.Optimizer,
