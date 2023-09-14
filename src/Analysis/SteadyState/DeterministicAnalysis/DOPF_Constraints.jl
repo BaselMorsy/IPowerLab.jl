@@ -437,32 +437,32 @@ function DOPF_substation_switching_ac_node_fixed!(model::Model, grid ::PowerGrid
 
         # Switching constraint to avoid connecting an element to two busbar sections at the same time
         JuMP.@constraint(model, no_circular_path_constraint_fixed[bus in prerequisites_data.ac_aux_bus_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
-            sum(model[:z_r_f][l, k, t] for l in grid.Buses[bus].ConnectedLinesIDs if (grid.Branches[l].BranchType == 1) && (l in prerequisites_data.ac_active_reconf_ids)) == 1)
+            sum(model[:z_r_f][l, k, t] for l in grid.Buses[bus].ConnectedLinesIDs if (grid.Branches[l].BranchType == 1) && (l in prerequisites_data.ac_fixed_reconf_ids)) == 1)
         #######################################################################################################################
         # Phase angle constraints accross all reconfiguration lines to be the same if the switch is 1
-        JuMP.@constraint(model, phase_angle_equivalence_reconf_up_fixed[r in prerequisites_data.ac_active_reconf_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+        JuMP.@constraint(model, phase_angle_equivalence_reconf_up_fixed[r in prerequisites_data.ac_fixed_reconf_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
             model[:δ][grid.Branches[r].Fr_bus_ID, k, t] - model[:δ][grid.Branches[r].To_bus_ID, k, t] ≤ prerequisites_data.M_δ * (1 - model[:z_r_f][r, k, t]))
 
-        JuMP.@constraint(model, phase_angle_equivalence_reconf_down_fixed[r in prerequisites_data.ac_active_reconf_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+        JuMP.@constraint(model, phase_angle_equivalence_reconf_down_fixed[r in prerequisites_data.ac_fixed_reconf_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
             model[:δ][grid.Branches[r].Fr_bus_ID, k, t] - model[:δ][grid.Branches[r].To_bus_ID, k, t] ≥ -prerequisites_data.M_δ * (1 - model[:z_r_f][r, k, t]))
         #######################################################################################################################
         # Phase angle constraints accross all couplers to be the same if the switch is 1
-        JuMP.@constraint(model, phase_angle_equivalence_coupler_up_fixed[c in prerequisites_data.ac_active_coupler_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+        JuMP.@constraint(model, phase_angle_equivalence_coupler_up_fixed[c in prerequisites_data.ac_fixed_coupler_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
             model[:δ][grid.Branches[c].Fr_bus_ID, k, t] - model[:δ][grid.Branches[c].To_bus_ID, k, t] ≤ prerequisites_data.M_δ * (1 - model[:z_c_f][c, k, t]*prerequisites_data.Contingency_Map["coupler"][c,k]))
 
-        JuMP.@constraint(model, phase_angle_equivalence_coupler_down_fixed[c in prerequisites_data.ac_active_coupler_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+        JuMP.@constraint(model, phase_angle_equivalence_coupler_down_fixed[c in prerequisites_data.ac_fixed_coupler_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
             model[:δ][grid.Branches[c].Fr_bus_ID, k, t] - model[:δ][grid.Branches[c].To_bus_ID, k, t] ≥ -prerequisites_data.M_δ * (1 - model[:z_c_f][c, k, t]*prerequisites_data.Contingency_Map["coupler"][c,k]))
         #######################################################################################################################
         # Reconfiguration line capacity
-        JuMP.@constraint(model, reconf_cap_up_fixed[r in prerequisites_data.ac_active_reconf_ids, s in [1,2], k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+        JuMP.@constraint(model, reconf_cap_up_fixed[r in prerequisites_data.ac_fixed_reconf_ids, s in [1,2], k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
             model[:p_branch_ac][r, s, k, t] ≤ model[:z_r_f][r, k, t] * prerequisites_data.M_E)
-        JuMP.@constraint(model, reconf_cap_down_fixed[r in prerequisites_data.ac_active_reconf_ids, s in [1,2], k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+        JuMP.@constraint(model, reconf_cap_down_fixed[r in prerequisites_data.ac_fixed_reconf_ids, s in [1,2], k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
             model[:p_branch_ac][r, s, k, t] ≥ -model[:z_r_f][r, k, t] * prerequisites_data.M_E)
         #######################################################################################################################
         # Couplers capacity
-        JuMP.@constraint(model, coupler_cap_up_fixed[c in prerequisites_data.ac_active_coupler_ids, s in [1,2], k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+        JuMP.@constraint(model, coupler_cap_up_fixed[c in prerequisites_data.ac_fixed_coupler_ids, s in [1,2], k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
             model[:p_branch_ac][c, s, k, t] ≤ model[:z_c_f][c, k, t] * prerequisites_data.M_E * prerequisites_data.Contingency_Map["coupler"][c,k])
-        JuMP.@constraint(model, coupler_cap_down_fixed[r in prerequisites_data.ac_active_coupler_ids, s in [1,2], k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+        JuMP.@constraint(model, coupler_cap_down_fixed[r in prerequisites_data.ac_fixed_coupler_ids, s in [1,2], k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
             model[:p_branch_ac][c, s, k, t] ≥ -model[:z_c_f][c, k, t] * prerequisites_data.M_E * prerequisites_data.Contingency_Map["coupler"][c,k])
     elseif simulation_settings.ac_grid_model == :AC
     end
