@@ -20,6 +20,7 @@
     NLP_solver = [] #Ipopt.Optimizer
     MILP_solver = [] #Gurobi.Optimizer
     Meta_solver = :none # => A pipeline of solution algorithms. To be determined. Here is where innovation happens!
+    Parallels = true
 end
 
 @with_kw mutable struct DOPF_Prerequisites

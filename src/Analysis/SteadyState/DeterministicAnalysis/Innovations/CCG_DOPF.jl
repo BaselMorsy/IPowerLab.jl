@@ -94,12 +94,23 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
 
         UB_tk = zeros(length(T), length(K_all))
 
-        t_sub_now = @elapsed Threads.@threads for t in T
-            Threads.@threads for k in collect(setdiff(Set(K_all),Set(prerequisites_data.k_t[t])))
-                SP_model = build_DOPF_SP!(grid, SimulationSettings, prerequisites_data, solved_MP_model, t, k)
-                solved_SP_model = solve_decomposed_model!(SP_model)
-                push!(SP_models, (t,k) => solved_SP_model)
-                UB_tk[t,k] = JuMP.objective_value(solved_SP_model)
+        if SimulationSettings.Parallels
+            t_sub_now = @elapsed Threads.@threads for t in T
+                Threads.@threads for k in collect(setdiff(Set(K_all),Set(prerequisites_data.k_t[t])))
+                    SP_model = build_DOPF_SP!(grid, SimulationSettings, prerequisites_data, solved_MP_model, t, k)
+                    solved_SP_model = solve_decomposed_model!(SP_model)
+                    push!(SP_models, (t,k) => solved_SP_model)
+                    UB_tk[t,k] = JuMP.objective_value(solved_SP_model)
+                end
+            end
+        else
+            t_sub_now = @elapsed for t in T
+                for k in collect(setdiff(Set(K_all),Set(prerequisites_data.k_t[t])))
+                    SP_model = build_DOPF_SP!(grid, SimulationSettings, prerequisites_data, solved_MP_model, t, k)
+                    solved_SP_model = solve_decomposed_model!(SP_model)
+                    push!(SP_models, (t,k) => solved_SP_model)
+                    UB_tk[t,k] = JuMP.objective_value(solved_SP_model)
+                end
             end
         end
         push!(t_sub, t_sub_now)
