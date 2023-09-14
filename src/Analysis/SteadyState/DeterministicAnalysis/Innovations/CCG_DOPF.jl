@@ -29,7 +29,7 @@ function build_DOPF_SP!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSett
         prerequisites_data_instance.ac_fixed_dynamic_branch_ids = prerequisites_data_instance.ac_active_dynamic_branch_ids
         prerequisites_data_instance.ac_active_dynamic_branch_ids = []
         for branch_id in prerequisites_data_instance.ac_fixed_dynamic_branch_ids
-            push!(fixed_topology, branch_id => Dict(k => Dict(t => JuMP.value(solved_MP_model[:z_l][branch_id, k, t]))))
+            push!(fixed_topology, branch_id => Dict(k => Dict(t => JuMP.value(solved_MP_model[:z_l][branch_id, 1, t]))))
         end
     end
 
@@ -37,7 +37,7 @@ function build_DOPF_SP!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSett
         prerequisites_data_instance.ac_fixed_coupler_ids = prerequisites_data_instance.ac_active_coupler_ids
         prerequisites_data_instance.ac_active_coupler_ids = []
         for branch_id in prerequisites_data_instance.ac_fixed_coupler_ids
-            push!(fixed_topology, branch_id => Dict(k => Dict(t => JuMP.value(solved_MP_model[:z_c][branch_id, k, t]))))
+            push!(fixed_topology, branch_id => Dict(k => Dict(t => JuMP.value(solved_MP_model[:z_c][branch_id, 1, t]))))
         end
     end
 
@@ -45,7 +45,7 @@ function build_DOPF_SP!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSett
         prerequisites_data_instance.ac_fixed_reconf_ids = prerequisites_data_instance.ac_active_reconf_ids
         prerequisites_data_instance.ac_active_reconf_ids = []
         for branch_id in prerequisites_data_instance.ac_fixed_reconf_ids
-            push!(fixed_topology, branch_id => Dict(k => Dict(t => JuMP.value(solved_MP_model[:z_r][branch_id, k, t]))))
+            push!(fixed_topology, branch_id => Dict(k => Dict(t => JuMP.value(solved_MP_model[:z_r][branch_id, 1, t]))))
         end
     end
 
