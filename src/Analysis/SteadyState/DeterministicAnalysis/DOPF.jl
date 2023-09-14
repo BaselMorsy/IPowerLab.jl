@@ -1227,7 +1227,7 @@ function build_snapshot_DOPF_model!(grid::PowerGrid, SimulationSettings::DOPF_Si
     if length(keys(prerequisites_data.fixed_commitments)) != 0
         DOPF_commitment_fixes!(model, grid, SimulationSettings, prerequisites_data)
     end
-    DOPF_objective_function!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_objective_function_CCG!(model, grid, SimulationSettings, prerequisites_data, k)
  
     return model
 end

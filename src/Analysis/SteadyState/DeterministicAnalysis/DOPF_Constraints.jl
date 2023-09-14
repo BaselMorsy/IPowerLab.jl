@@ -930,6 +930,17 @@ function DOPF_objective_function!(model::Model, grid ::PowerGrid, simulation_set
         + sum([model[:p_gen_dc][g,1,t]*grid.DCGenerators[g].C1 for g in prerequisites_data.dc_gen_ids, t in prerequisites_data.time_horizon], init=0))
 end
 
+function DOPF_objective_function_CCG!(model::Model, grid ::PowerGrid, simulation_settings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites, k)
+    # non_commitable_gen costs + commitable_gen costs + fixed_commitment_gen costs + fixed_schedule_gen costs + load_shedding costs + dc_gen cost
+    GenBids = prerequisites_data.Order_Book.Gen_bids
+    LoadBids = prerequisites_data.Order_Book.Load_bids
+    JuMP.@objective(model, Min, sum([model[:p_gen_ac][g,k,t]*GenBids[g]["price"][t][1] for g in prerequisites_data.non_commitable_gen_ids, t in prerequisites_data.time_horizon], init=0)
+        + sum([model[:p_gen_ac][g,k,t]*GenBids[g]["price"][t][1] + grid.Generators[g].C0*model[:u_gt][g,t]+model[:α_gt][g,t]*grid.Generators[g].start_up_cost+model[:β_gt][g,t]*grid.Generators[g].shut_down_cost for g in prerequisites_data.commitable_gen_ids, t in prerequisites_data.time_horizon], init=0)
+        + sum([model[:p_gen_ac][g,k,t]*GenBids[g]["price"][t][1] for g in keys(prerequisites_data.fixed_commitments), t in prerequisites_data.time_horizon], init=0)
+        + sum([model[:p_gen_ac][g,k,t]*GenBids[g]["price"][t][1] for g in keys(prerequisites_data.fixed_schedules), t in prerequisites_data.time_horizon], init=0)
+        + sum([model[:p_ls_ac][d,k,t]*LoadBids[d]["price"][t][1] for d  in prerequisites_data.ac_load_shedding_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon if k ∈ prerequisites_data.k_t[t]], init=0)
+        + sum([model[:p_gen_dc][g,k,t]*grid.DCGenerators[g].C1 for g in prerequisites_data.dc_gen_ids, t in prerequisites_data.time_horizon], init=0))
+end
 ###############################################
 
 function DOPF_single_node_balance!(model::Model, grid ::PowerGrid, simulation_settings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites)
