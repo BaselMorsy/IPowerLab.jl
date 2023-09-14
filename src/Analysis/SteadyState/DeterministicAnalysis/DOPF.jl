@@ -1178,6 +1178,20 @@ end
 
 function build_snapshot_DOPF_model!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites; k=1)
 
+    solver = SimulationSettings.MILP_solver
+    NLP_flag = false
+    if SimulationSettings.ac_grid_model == :AC || SimulationSettings.dc_grid_model == :FNL
+        solver = SimulationSettings.NLP_solver
+        NLP_flag = true
+    end
+
+    if NLP_flag
+        if SimulationSettings.transmission_switching != [] || SimulationSettings.substation_switching != []
+            error("Switching is not supported with Nonlinear problem settings.")
+            return -1
+        end
+    end
+    
     # Model initialization
     model = Model(solver)
 
