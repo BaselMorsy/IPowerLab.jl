@@ -388,9 +388,11 @@ end
 function DOPF_substation_switching_ac_node!(model::Model, grid ::PowerGrid, simulation_settings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites)
     if simulation_settings.ac_grid_model == :Bθ
 
-        # Switching constraint to avoid connecting an element to two busbar sections at the same time
-        JuMP.@constraint(model, no_circular_path_constraint[bus in prerequisites_data.ac_aux_bus_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
-            sum(model[:z_r][l, k, t] for l in grid.Buses[bus].ConnectedLinesIDs if (grid.Branches[l].BranchType == 1) && (l in prerequisites_data.ac_active_reconf_ids)) == 1)
+        if prerequisites_data.ac_active_reconf_ids != []
+            # Switching constraint to avoid connecting an element to two busbar sections at the same time
+            JuMP.@constraint(model, no_circular_path_constraint[bus in prerequisites_data.ac_aux_bus_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+                sum(model[:z_r][l, k, t] for l in grid.Buses[bus].ConnectedLinesIDs if (grid.Branches[l].BranchType == 1) && (l in prerequisites_data.ac_active_reconf_ids)) == 1)
+        end
         #######################################################################################################################
         # Phase angle constraints accross all reconfiguration lines to be the same if the switch is 1
         JuMP.@constraint(model, phase_angle_equivalence_reconf_up[r in prerequisites_data.ac_active_reconf_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
@@ -436,9 +438,11 @@ end
 function DOPF_substation_switching_ac_node_fixed!(model::Model, grid ::PowerGrid, simulation_settings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites)
     if simulation_settings.ac_grid_model == :Bθ
 
-        # Switching constraint to avoid connecting an element to two busbar sections at the same time
-        JuMP.@constraint(model, no_circular_path_constraint_fixed[bus in prerequisites_data.ac_aux_bus_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
-            sum(model[:z_r_f][l, k, t] for l in grid.Buses[bus].ConnectedLinesIDs if (grid.Branches[l].BranchType == 1) && (l in prerequisites_data.ac_fixed_reconf_ids)) == 1)
+        if prerequisites_data.ac_fixed_reconf_ids != []
+            # Switching constraint to avoid connecting an element to two busbar sections at the same time
+            JuMP.@constraint(model, no_circular_path_constraint_fixed[bus in prerequisites_data.ac_aux_bus_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+                sum(model[:z_r_f][l, k, t] for l in grid.Buses[bus].ConnectedLinesIDs if (grid.Branches[l].BranchType == 1) && (l in prerequisites_data.ac_fixed_reconf_ids)) == 1)
+        end
         #######################################################################################################################
         # Phase angle constraints accross all reconfiguration lines to be the same if the switch is 1
         JuMP.@constraint(model, phase_angle_equivalence_reconf_up_fixed[r in prerequisites_data.ac_fixed_reconf_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
