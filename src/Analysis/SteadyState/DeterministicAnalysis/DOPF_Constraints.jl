@@ -426,7 +426,7 @@ function DOPF_substation_switching_ac_node!(model::Model, grid ::PowerGrid, simu
     end
 
     # Symmetry reduction constraints
-    if length(keys(grid.Substations)) != 0
+    if length(keys(grid.Substations)) != 0 && length(keys(prerequisites_data.fixed_topology)) == 0
         JuMP.@constraint(model, symmetry_reduction[s in collect(keys(grid.Substations)), k in prerequisites_data.k, t in prerequisites_data.time_horizon; length(grid.Substations[s].BusbarSections_IDs) == 2 && k ∈ prerequisites_data.k_t[t]],
             sum(model[:z_r][r,k,t] for r in grid.Buses[grid.Substations[s].BusbarSections_IDs[1]].ConnectedLinesIDs if grid.Branches[r].BranchType == 1) ≥ sum(model[:z_r][r,k,t] for r in grid.Buses[grid.Substations[s].BusbarSections_IDs[2]].ConnectedLinesIDs if grid.Branches[r].BranchType == 1))
     end
