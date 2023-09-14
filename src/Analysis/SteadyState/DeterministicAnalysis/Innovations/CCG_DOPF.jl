@@ -61,7 +61,7 @@ function solve_decomposed_model!(model::Model)
 end
 
 function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites,
-    order_book::OrderBook ; update_grid=false, ϵ=0.1)
+    order_book::OrderBook ; update_grid=false, ϵ=0.1, update_order_book=false)
 
     δ = Inf
     
@@ -117,8 +117,57 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
         println("|Iteration Count|δ|")
         println(iter_count, "  ", δ)
     end
+    status = process_last_MP!(model, update_grid, update_order_book)
+    return solved_MP_model, status
+end
 
-    return solved_MP_model
+function process_last_MP!(model, update_grid, update_order_book)
+    
+    if JuMP.has_values(model)
+        flag = haskey(model, :p_ls_ac)
+        if update_order_book
+            for t in prerequisites_data.time_horizon
+                for g in prerequisites_data.Order_Book.Gen_ids
+                    prerequisites_data.Order_Book.Schedule["gen"][g][t] = JuMP.value.(model[:p_gen_ac])[g,1,t]
+                end
+
+                if flag
+                    for d in prerequisites_data.ac_load_shedding_ids
+                        prerequisites_data.Order_Book.Schedule["load"][d][t] = -JuMP.value.(model[:p_ls_ac][d,1,t])
+                    end
+                else
+                    for d in prerequisites_data.ac_load_shedding_ids
+                        prerequisites_data.Order_Book.Schedule["load"][d][t] = 0
+                    end
+                end  
+            end
+        end
+
+        if update_grid
+            push!(grid.Operating_Cost, JuMP.objective_value(model))
+            DOPF_post_processing!(model, grid, SimulationSettings, prerequisites_data, order_book)
+        end
+        return true
+    else
+        if update_order_book
+            for t in prerequisites_data.time_horizon
+                for g in prerequisites_data.Order_Book.Gen_ids
+                    prerequisites_data.Order_Book.Schedule["gen"][g][t] = 0
+                end
+
+
+                for d in prerequisites_data.ac_load_shedding_ids
+                    prerequisites_data.Order_Book.Schedule["load"][d][t] = 0
+                end
+            end
+        end
+
+        if update_grid
+            push!(grid.Operating_Cost, -1)
+        end
+
+        return false
+    end
 end
 
 function find_next_k(v::Vector, nk::Int)

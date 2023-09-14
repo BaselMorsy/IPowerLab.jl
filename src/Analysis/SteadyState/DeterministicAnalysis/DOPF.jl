@@ -1734,7 +1734,9 @@ function SCUC_Model!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSetting
         solution_status = optimize_DOPF_model!(model, grid, SimulationSettings, prerequisites_data, order_book; update_grid=update_grid, update_order_book=true)
         return model, solution_status
     elseif SimulationSettings.Meta_solver == :CCG
-        # Do something else
+        solved_MP, solution_status = solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites,
+            order_book::OrderBook ; update_grid=true, ϵ=0.1, update_order_book=true)
+        return solved_MP, solution_status
     end
 end
 
@@ -1764,7 +1766,9 @@ function SCOPF_Model!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSettin
         solution_status = optimize_DOPF_model!(model, grid, SimulationSettings, prerequisites_data, order_book; update_grid=update_grid, update_order_book=true)
         return model, solution_status
     elseif SimulationSettings.Meta_solver == :CCG
-
+        solved_MP, solution_status = solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites,
+            order_book::OrderBook ; update_grid=true, ϵ=0.1, update_order_book=true)
+        return solved_MP, solution_status
     end
 end
 
