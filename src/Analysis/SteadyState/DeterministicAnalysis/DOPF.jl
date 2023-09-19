@@ -704,6 +704,66 @@ function run_DOPF_simulation!(grid::PowerGrid, simulation_settings::DOPF_Simulat
         prerequisites_data; update_grid=update_grid)
 end
 
+function run_DOPF_simulation_no_market!(grid::PowerGrid, simulation_settings::DOPF_SimulationSettings,
+    prerequisites_data::DOPF_Prerequisites; update_grid=true)
+
+    solved_flag = false
+
+    if prerequisites_data.Order_Book.Clearing == :UC
+        
+        for t in keys(prerequisites_data.k_t)
+            prerequisites_data.k_t[t] = [1]
+        end
+        model, solved_flag = UC_Model!(grid, simulation_settings, prerequisites_data, order_book ; update_grid=update_grid)
+
+    elseif prerequisites_data.Order_Book.Clearing == :NCUC
+        
+        for t in keys(prerequisites_data.k_t)
+            prerequisites_data.k_t[t] = [1]
+        end
+        model, solved_flag = NCUC_Model!(grid, simulation_settings, prerequisites_data, order_book ; update_grid=update_grid)
+        
+    elseif prerequisites_data.Order_Book.Clearing == :SCUC
+
+        model, solved_flag = SCUC_Model!(grid, simulation_settings, prerequisites_data, order_book ; update_grid=update_grid)        
+
+    elseif prerequisites_data.Order_Book.Clearing == :ED
+        
+        for t in keys(prerequisites_data.k_t)
+            prerequisites_data.k_t[t] = [1]
+        end
+
+        model, solved_flag = ED_Model!(grid, simulation_settings, prerequisites_data, order_book ; update_grid=update_grid)
+
+    elseif prerequisites_data.Order_Book.Clearing == :OPF
+        for t in keys(prerequisites_data.k_t)
+            prerequisites_data.k_t[t] = [1]
+        end
+
+        for t in simulation_settings.time_horizon
+            prerequisites_data.time_horizon = [t]
+            model, solved_flag = OPF_Model!(grid, simulation_settings, prerequisites_data, order_book ; update_grid=update_grid)
+        end
+        prerequisites_data.time_horizon = simulation_settings.time_horizon
+
+        for gen_duplet_id in keys(grid.Generator_Duplets)
+            merge_element!(grid, :Generator, gen_duplet_id)
+        end
+    elseif prerequisites_data.Order_Book.Clearing == :SCOPF
+        
+        for t in simulation_settings.time_horizon
+            prerequisites_data.time_horizon = [t]
+            model, solved_flag = SCOPF_Model!(grid, simulation_settings, prerequisites_data, order_book ; update_grid=update_grid)
+        end
+        prerequisites_data.time_horizon = simulation_settings.time_horizon
+
+        for gen_duplet_id in keys(grid.Generator_Duplets)
+            merge_element!(grid, :Generator, gen_duplet_id)
+        end
+    end
+    return solved_flag
+end
+
 function DOPF_post_processing!(model::Model, grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites, order_book::OrderBook)
     
     Branch_set = keys(grid.Branches)
@@ -1751,7 +1811,7 @@ function SCUC_Model!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSetting
         return model, solution_status
     elseif SimulationSettings.Meta_solver == :CCG
         solved_MP, solution_status = solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites,
-            order_book::OrderBook ; update_grid=true, ϵ=0.1, update_order_book=true)
+            order_book::OrderBook ; update_grid=update_grid, ϵ=0.1, update_order_book=update_grid)
         return solved_MP, solution_status
     end
 end
@@ -1783,7 +1843,7 @@ function SCOPF_Model!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSettin
         return model, solution_status
     elseif SimulationSettings.Meta_solver == :CCG
         solved_MP, solution_status = solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites,
-            order_book::OrderBook ; update_grid=true, ϵ=0.1, update_order_book=true)
+            order_book::OrderBook ; update_grid=update_grid, ϵ=0.1, update_order_book=update_grid)
         return solved_MP, solution_status
     end
 end

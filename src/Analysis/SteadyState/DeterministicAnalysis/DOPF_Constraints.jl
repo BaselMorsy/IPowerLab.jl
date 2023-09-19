@@ -517,10 +517,10 @@ function DOPF_load_shedding_limits_ac_node!(model::Model, grid ::PowerGrid, simu
         JuMP.@constraint(model, load_shedding_limits_down[d in prerequisites_data.ac_load_shedding_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t] && prerequisites_data.Order_Book.Load_bids[d]["qty"][t] < 0],
             prerequisites_data.Order_Book.Load_bids[d]["qty"][t] ≤ model[:p_ls_ac][d,k,t] ≤ 0)
 
-        JuMP.@constrain(model, curtailment_limits_up[g in prerequisites_data.ac_gen_curtailment_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+        JuMP.@constraint(model, curtailment_limits_up[g in prerequisites_data.ac_gen_curtailment_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
             model[:p_curt][g,k,t] ≤ model[:p_gen_ac][g,k,t])
 
-        JuMP.@constrain(model, curtailment_limits_down[g in prerequisites_data.ac_gen_curtailment_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+        JuMP.@constraint(model, curtailment_limits_down[g in prerequisites_data.ac_gen_curtailment_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
             0 ≤ model[:p_curt][g,k,t])
     elseif simulation_settings.ac_grid_model == :AC
         if length(prerequisites_data.ac_load_shedding_ids) != 0

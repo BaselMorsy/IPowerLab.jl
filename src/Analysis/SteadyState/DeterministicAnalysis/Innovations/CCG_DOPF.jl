@@ -127,11 +127,11 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
         println("|Iteration Count|δ|")
         println(iter_count, "  ", δ)
     end
-    status = process_last_MP!(model, update_grid, update_order_book)
+    status = process_last_MP!(grid, solved_MP_model, prerequisites_data, SimulationSettings, order_book, update_grid, update_order_book)
     return solved_MP_model, status
 end
 
-function process_last_MP!(model, update_grid, update_order_book)
+function process_last_MP!(grid, model, prerequisites_data, SimulationSettings, order_book, update_grid, update_order_book)
     
     if JuMP.has_values(model)
         flag = haskey(model, :p_ls_ac)
