@@ -32,6 +32,7 @@ end
     ac_gen_ids # all real generator ids (virtual generators not included)
     ac_load_ids # load ids
     ac_load_shedding_ids # default -> same as ac_load_ids
+    ac_gen_curtailment_ids
 
     ac_gen_id_to_gen_root # dictionary g -> g_root where g_root is the main generator NOT the duplicate one in case of different down-reg costs
     root_gen_to_duplicate_gen # dictionary g_root -> g_duplicate
@@ -98,7 +99,7 @@ function DOPF_variable_initialization!(model::Model, grid ::PowerGrid, simulatio
         JuMP.@variable(model, p_branch_ac[l in prerequisites_data.ac_branch_ids, s in sides, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]])
         JuMP.@variable(model, p_gen_ac[g in prerequisites_data.ac_gen_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]])
         JuMP.@variable(model, p_ls_ac[d in prerequisites_data.ac_load_shedding_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]])
-
+        JuMP.@variable(model, p_curt[g in prerequisites_data.ac_gen_curtailment_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]])
         ###################################################################################
         # Binary commitment variables
         if length(prerequisites_data.commitable_gen_ids) != 0
@@ -284,6 +285,7 @@ function DOPF_nodal_balance_ac_node!(model::Model, grid ::PowerGrid, simulation_
                 + sum([model[:p_dc_link][g,k,t] for g in grid.Buses[n].ConnectedGensIDs if g in prerequisites_data.dc_link_vritual_gen_ids], init = 0)
                 + sum([model[:p_ls_ac][d,k,t] for d in grid.Buses[n].ConnectedLoadsIDs if d in prerequisites_data.ac_load_shedding_ids], init = 0)
                 - sum([grid.Loads[d].Pd_t[t] for d in grid.Buses[n].ConnectedLoadsIDs if d in prerequisites_data.ac_load_ids], init = 0)
+                - sum([model[:p_curt][g,k,t] for g in grid.Buses[n].ConnectedGensIDs if g in prerequisites_data.ac_gen_curtailment_ids], init = 0)
                 == sum([model[:p_branch_ac][l,1,k,t] for l in grid.Buses[n].ConnectedLinesIDs if grid.Branches[l].Fr_bus_ID == n], init = 0)
                 + sum([model[:p_branch_ac][l,2,k,t] for l in grid.Buses[n].ConnectedLinesIDs if grid.Branches[l].To_bus_ID == n], init = 0)
                 )
@@ -459,12 +461,17 @@ function DOPF_substation_switching_ac_node_fixed!(model::Model, grid ::PowerGrid
             model[:δ][grid.Branches[c].Fr_bus_ID, k, t] - model[:δ][grid.Branches[c].To_bus_ID, k, t] ≥ -prerequisites_data.M_δ * (1 - model[:z_c_f][c, k, t]*prerequisites_data.Contingency_Map["coupler"][c,k]))
         #######################################################################################################################
         # Reconfiguration line capacity
+        JuMP.@constraint(model, reconf_flow_fixed[r in prerequisites_data.ac_fixed_reconf_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+            model[:p_branch_ac][r, 1, k, t] + model[:p_branch_ac][r, 2, k, t] == 0)
+
         JuMP.@constraint(model, reconf_cap_up_fixed[r in prerequisites_data.ac_fixed_reconf_ids, s in [1,2], k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
             model[:p_branch_ac][r, s, k, t] ≤ model[:z_r_f][r, k, t] * prerequisites_data.M_E)
         JuMP.@constraint(model, reconf_cap_down_fixed[r in prerequisites_data.ac_fixed_reconf_ids, s in [1,2], k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
             model[:p_branch_ac][r, s, k, t] ≥ -model[:z_r_f][r, k, t] * prerequisites_data.M_E)
         #######################################################################################################################
         # Couplers capacity
+        JuMP.@constraint(model, coupler_flow_fixed[c in prerequisites_data.ac_fixed_coupler_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+            model[:p_branch_ac][c, 1, k, t] + model[:p_branch_ac][c, 2, k, t] == 0)
         JuMP.@constraint(model, coupler_cap_up_fixed[c in prerequisites_data.ac_fixed_coupler_ids, s in [1,2], k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
             model[:p_branch_ac][c, s, k, t] ≤ model[:z_c_f][c, k, t] * prerequisites_data.M_E * prerequisites_data.Contingency_Map["coupler"][c,k])
         JuMP.@constraint(model, coupler_cap_down_fixed[r in prerequisites_data.ac_fixed_coupler_ids, s in [1,2], k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
@@ -507,8 +514,14 @@ function DOPF_load_shedding_limits_ac_node!(model::Model, grid ::PowerGrid, simu
         JuMP.@constraint(model, load_shedding_limits_up[d in prerequisites_data.ac_load_shedding_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t] && prerequisites_data.Order_Book.Load_bids[d]["qty"][t] ≥ 0 ],
             0 ≤ model[:p_ls_ac][d,k,t] ≤ prerequisites_data.Order_Book.Load_bids[d]["qty"][t])
 
-        JuMP.@constraint(model, load_shedding_limits_down[d in prerequisites_data.ac_load_shedding_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t] && prerequisites_data.Order_Book.Load_bids[d]["qty"][t] ≤ 0],
+        JuMP.@constraint(model, load_shedding_limits_down[d in prerequisites_data.ac_load_shedding_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t] && prerequisites_data.Order_Book.Load_bids[d]["qty"][t] < 0],
             prerequisites_data.Order_Book.Load_bids[d]["qty"][t] ≤ model[:p_ls_ac][d,k,t] ≤ 0)
+
+        JuMP.@constrain(model, curtailment_limits_up[g in prerequisites_data.ac_gen_curtailment_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+            model[:p_curt][g,k,t] ≤ model[:p_gen_ac][g,k,t])
+
+        JuMP.@constrain(model, curtailment_limits_down[g in prerequisites_data.ac_gen_curtailment_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+            0 ≤ model[:p_curt][g,k,t])
     elseif simulation_settings.ac_grid_model == :AC
         if length(prerequisites_data.ac_load_shedding_ids) != 0
         else
@@ -931,7 +944,8 @@ function DOPF_objective_function!(model::Model, grid ::PowerGrid, simulation_set
         + sum([model[:p_gen_ac][g,1,t]*GenBids[g]["price"][t][1] for g in keys(prerequisites_data.fixed_commitments), t in prerequisites_data.time_horizon], init=0)
         + sum([model[:p_gen_ac][g,1,t]*GenBids[g]["price"][t][1] for g in keys(prerequisites_data.fixed_schedules), t in prerequisites_data.time_horizon], init=0)
         + sum([model[:p_ls_ac][d,k,t]*LoadBids[d]["price"][t][1] for d  in prerequisites_data.ac_load_shedding_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon if k ∈ prerequisites_data.k_t[t]], init=0)
-        + sum([model[:p_gen_dc][g,1,t]*grid.DCGenerators[g].C1 for g in prerequisites_data.dc_gen_ids, t in prerequisites_data.time_horizon], init=0))
+        + sum([model[:p_gen_dc][g,1,t]*grid.DCGenerators[g].C1 for g in prerequisites_data.dc_gen_ids, t in prerequisites_data.time_horizon], init=0)
+        + sum([model[:p_curt][g,k,t]*1000 for g in prerequisites_data.ac_gen_curtailment_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon if k ∈ prerequisites_data.k_t[t]], init=0))
 end
 
 function DOPF_objective_function_CCG!(model::Model, grid ::PowerGrid, simulation_settings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites, k)
@@ -943,7 +957,8 @@ function DOPF_objective_function_CCG!(model::Model, grid ::PowerGrid, simulation
         + sum([model[:p_gen_ac][g,k,t]*GenBids[g]["price"][t][1] for g in keys(prerequisites_data.fixed_commitments), t in prerequisites_data.time_horizon], init=0)
         + sum([model[:p_gen_ac][g,k,t]*GenBids[g]["price"][t][1] for g in keys(prerequisites_data.fixed_schedules), t in prerequisites_data.time_horizon], init=0)
         + sum([model[:p_ls_ac][d,k,t]*LoadBids[d]["price"][t][1] for d  in prerequisites_data.ac_load_shedding_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon if k ∈ prerequisites_data.k_t[t]], init=0)
-        + sum([model[:p_gen_dc][g,k,t]*grid.DCGenerators[g].C1 for g in prerequisites_data.dc_gen_ids, t in prerequisites_data.time_horizon], init=0))
+        + sum([model[:p_gen_dc][g,k,t]*grid.DCGenerators[g].C1 for g in prerequisites_data.dc_gen_ids, t in prerequisites_data.time_horizon], init=0)
+        + sum([model[:p_curt][g,k,t]*1000 for g in prerequisites_data.ac_gen_curtailment_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon if k ∈ prerequisites_data.k_t[t]], init=0))
 end
 ###############################################
 

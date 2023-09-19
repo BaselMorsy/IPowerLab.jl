@@ -80,7 +80,7 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
     SP_models = Dict()
     #Main loop
     while δ ≥ ϵ
-        iter_count = iter_count + 1
+        iter_count += 1
 
         println("Debug msg @ iteration " * string(iter_count))
         # Solve master-problem
@@ -104,7 +104,7 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
             end
         else
             t_sub_now = @elapsed for t in T
-                for k in collect(setdiff(Set(K_all),Set(prerequisites_data.k_t[t])))
+                for k in sort(collect(setdiff(Set(K_all),Set(prerequisites_data.k_t[t]))))
                     SP_model = build_DOPF_SP!(grid, SimulationSettings, prerequisites_data, solved_MP_model, t, k)
                     solved_SP_model = solve_decomposed_model!(SP_model)
                     push!(SP_models, (t,k) => solved_SP_model)

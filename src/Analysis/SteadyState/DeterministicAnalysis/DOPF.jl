@@ -428,6 +428,7 @@ function compile_prerequisites_DOPF!(grid::PowerGrid, market::PowerMarket, order
     ac_gen_ids = [g for g in keys(grid.Generators) if grid.Generators[g].GenType != :virtual]
     ac_load_ids = collect(keys(grid.Loads))
     ac_load_shedding_ids = ac_load_ids
+    ac_gen_curtailment_ids = ac_gen_ids
     ac_gen_id_to_gen_root = generation_specs["ac_gen_id_to_gen_root"]
     root_gen_to_duplicate_gen = generation_specs["root_gen_to_duplicate_gen"]
 
@@ -533,7 +534,7 @@ function compile_prerequisites_DOPF!(grid::PowerGrid, market::PowerMarket, order
 
     return DOPF_Prerequisites(time_horizon=SimulationSettings.time_horizon, base_MVA=grid.S_base, ac_node_ids=ac_node_ids, ac_aux_bus_ids=ac_aux_bus_ids, ac_branch_ids=ac_branch_ids,
         ac_gen_ids=ac_gen_ids, ac_load_ids=ac_load_ids, ac_load_shedding_ids=ac_load_shedding_ids,
-        ac_gen_id_to_gen_root=ac_gen_id_to_gen_root, root_gen_to_duplicate_gen=root_gen_to_duplicate_gen, contingency_redispatch=contingency_redispatch,
+        ac_gen_curtailment_ids=ac_gen_curtailment_ids,ac_gen_id_to_gen_root=ac_gen_id_to_gen_root, root_gen_to_duplicate_gen=root_gen_to_duplicate_gen, contingency_redispatch=contingency_redispatch,
         commitable_gen_ids=commitable_gen_ids, non_commitable_gen_ids=non_commitable_gen_ids, fixed_commitments=fixed_commitments,
         fixed_schedules=fixed_schedules, ac_static_branch_ids=ac_static_branch_ids, ac_active_dynamic_branch_ids=ac_active_dynamic_branch_ids, ac_active_reconf_ids=ac_active_reconf_ids,
         ac_active_coupler_ids=ac_active_coupler_ids, ac_fixed_dynamic_branch_ids=ac_fixed_dynamic_branch_ids, ac_fixed_reconf_ids=ac_fixed_reconf_ids, ac_fixed_coupler_ids=ac_fixed_coupler_ids,
@@ -581,6 +582,7 @@ function compile_prerequisites_DOPF_no_market!(grid::PowerGrid, simulation_type:
     ac_gen_ids = [g for g in keys(grid.Generators) if grid.Generators[g].GenType != :virtual]
     ac_load_ids = collect(keys(grid.Loads))
     ac_load_shedding_ids = ac_load_ids
+    ac_gen_curtailment_ids = ac_gen_ids
 
     if SimulationSettings.contingency_redispatch_condition == :all
         contingency_redispatch = K
@@ -684,7 +686,7 @@ function compile_prerequisites_DOPF_no_market!(grid::PowerGrid, simulation_type:
 
     return DOPF_Prerequisites(time_horizon=SimulationSettings.time_horizon, base_MVA=grid.S_base, ac_node_ids=ac_node_ids, ac_aux_bus_ids=ac_aux_bus_ids, ac_branch_ids=ac_branch_ids,
         ac_gen_ids=ac_gen_ids, ac_load_ids=ac_load_ids, ac_load_shedding_ids=ac_load_shedding_ids,
-        ac_gen_id_to_gen_root=ac_gen_id_to_gen_root, root_gen_to_duplicate_gen=root_gen_to_duplicate_gen, contingency_redispatch=contingency_redispatch,
+        ac_gen_curtailment_ids=ac_gen_curtailment_ids, ac_gen_id_to_gen_root=ac_gen_id_to_gen_root, root_gen_to_duplicate_gen=root_gen_to_duplicate_gen, contingency_redispatch=contingency_redispatch,
         commitable_gen_ids=commitable_gen_ids, non_commitable_gen_ids=non_commitable_gen_ids, fixed_commitments=fixed_commitments,
         fixed_schedules=fixed_schedules, ac_static_branch_ids=ac_static_branch_ids, ac_active_dynamic_branch_ids=ac_active_dynamic_branch_ids, ac_active_reconf_ids=ac_active_reconf_ids,
         ac_active_coupler_ids=ac_active_coupler_ids, ac_fixed_dynamic_branch_ids=ac_fixed_dynamic_branch_ids, ac_fixed_reconf_ids=ac_fixed_reconf_ids, ac_fixed_coupler_ids=ac_fixed_coupler_ids,
