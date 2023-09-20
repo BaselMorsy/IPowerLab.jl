@@ -177,13 +177,15 @@ function split_element!(grid ::PowerGrid, object_type ::Symbol, object_id ::Int6
         type = my_converter.type
         if modularization == :discrete
             grid.Converters[object_id].rate *= 1/n
-            grid.Generators[grid.Converters[object_id].gen_dc_id].Pg_max *= 1/n
+            grid.DCGenerators[grid.Converters[object_id].gen_dc_id].Pg_max *= 1/n
             grid.Generators[grid.Converters[object_id].gen_ac_id].Pg_max *= 1/n
-            grid.Generators[grid.Converters[object_id].gen_dc_id].Pg_min *= 1/n
+            grid.DCGenerators[grid.Converters[object_id].gen_dc_id].Pg_min *= 1/n
             grid.Generators[grid.Converters[object_id].gen_ac_id].Pg_min *= 1/n
-            for i in collect(1:n)
+            for i in collect(1:n-1)
                 add_converter!(grid,DC_Bus_ID,AC_Bus_ID,rate*1/n,type=type)
             end
+            grid.N_conv_duplets += 1
+            push!(grid.Converter_Duplets, grid.N_conv_duplets => (my_converter.Conv_ID, grid.N_converter))
         elseif modularization == :continuous
             if n > 2
                 error("Continous capacity applies only for 2 converters!")

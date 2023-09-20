@@ -54,6 +54,30 @@ function build_DOPF_SP!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSett
     return build_snapshot_DOPF_model!(grid, SimulationSettings, prerequisites_data_instance, k=k)
 end
 
+function topology_warm_start!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites,
+    solved_MP_model::Model)
+
+    starting_topology = Dict()
+
+    if SimulationSettings.substation_switching["reconf"] == [:pre]
+        for t in prerequisites_data.time_horizon
+            for branch_id in prerequisites_data.ac_active_reconf_ids
+                push!(starting_topology, branch_id => Dict(1 => Dict(t => JuMP.value(solved_MP_model[:z_r][branch_id, 1, t]))))
+            end
+        end
+    elseif SimulationSettings.substation_switching["reconf"] == [:pre,:post]
+        for t in prerequisites_data.time_horizon
+            for k in prerequisites_data.k_t[t]
+                for branch_id in prerequisites_data.ac_active_reconf_ids
+                    push!(starting_topology, branch_id => Dict(k => Dict(t => JuMP.value(solved_MP_model[:z_r][branch_id, 1, t]))))
+                end
+            end
+        end
+    end
+
+    return starting_topology
+end
+
 function solve_decomposed_model!(model::Model)
     optimize!(model)
     return model
@@ -66,7 +90,7 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
     
     iter_count = 0
     T = SimulationSettings.time_horizon
-    K_all = prerequisites_data.k
+    K_all = deepcopy(prerequisites_data.k)
 
     t_master = []
     t_sub = []
@@ -78,15 +102,31 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
 
     MP_model = []
     SP_models = Dict()
+    starting_topology = Dict()
+
     #Main loop
     while δ ≥ ϵ
         iter_count += 1
 
         println("Debug msg @ iteration " * string(iter_count))
         # Solve master-problem
-
         MP_model = build_DOPF_MP!(grid, SimulationSettings, prerequisites_data)
+        if iter_count > 1
+            ## apply starting topology
+            if length(keys(starting_topology)) > 0
+                for t in prerequisites_data.time_horizon
+                    for r in prerequisites_data.ac_active_reconf_ids
+                        JuMP.set_start_value(MP_model[:z_r][r,1,t], starting_topology[r][1][t])
+                    end
+                end
+            end
+        end
         t_master_now = @elapsed solved_MP_model = solve_decomposed_model!(MP_model)
+        
+        if !JuMP.has_values(solved_MP_model)
+            MP_model = build_DOPF_MP!(grid, SimulationSettings, prerequisites_data)
+            t_master_now = @elapsed solved_MP_model = solve_decomposed_model!(MP_model)
+        end
         push!(t_master, t_master_now)
 
         LB_t = [calculate_opex_t(solved_MP_model,grid, prerequisites_data, t; include_load_shedding=false, include_commitment_cost=false) for t in T]
@@ -117,11 +157,17 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
         
         for t in T
             # 1 should be a data structure ::CCG_Settings which can include nk[t] (number of k's to include) or a DRL agent that chooses the k's
-            append!(prerequisites_data.k_t[t], find_next_k(UB_tk[t,:], 1))
             UB_t[t] = maximum(UB_tk[t,:])
         end
 
         δ = maximum(abs.(UB_t - LB_t) ./ LB_t)
+
+        if δ ≥ ϵ
+            for t in T
+                append!(prerequisites_data.k_t[t], find_next_k(UB_tk[t,:], 1))
+            end
+            starting_topology = topology_warm_start!(grid, SimulationSettings, prerequisites_data, solved_MP_model)
+        end
         push!(δ_it, δ)
         
         println("|Iteration Count|δ|")
@@ -132,7 +178,7 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
 end
 
 function process_last_MP!(grid, model, prerequisites_data, SimulationSettings, order_book, update_grid, update_order_book)
-    
+    push!(grid.Operating_Cost, JuMP.objective_value(model))
     if JuMP.has_values(model)
         flag = haskey(model, :p_ls_ac)
         if update_order_book
@@ -154,7 +200,6 @@ function process_last_MP!(grid, model, prerequisites_data, SimulationSettings, o
         end
 
         if update_grid
-            push!(grid.Operating_Cost, JuMP.objective_value(model))
             DOPF_post_processing!(model, grid, SimulationSettings, prerequisites_data, order_book)
         end
         return true
@@ -171,11 +216,7 @@ function process_last_MP!(grid, model, prerequisites_data, SimulationSettings, o
                 end
             end
         end
-
-        if update_grid
-            push!(grid.Operating_Cost, -1)
-        end
-
+        push!(grid.Operating_Cost, -1)
         return false
     end
 end

@@ -708,7 +708,7 @@ function run_DOPF_simulation_no_market!(grid::PowerGrid, simulation_settings::DO
     prerequisites_data::DOPF_Prerequisites; update_grid=true)
 
     solved_flag = false
-
+    order_book = prerequisites_data.Order_Book
     if prerequisites_data.Order_Book.Clearing == :UC
         
         for t in keys(prerequisites_data.k_t)
@@ -1060,7 +1060,7 @@ function DOPF_post_processing!(model::Model, grid::PowerGrid, SimulationSettings
             end
         end
     end
-
+    update_grid_tables_DOPF!(grid; t=1, k=1)
 end
 
 function update_grid_tables_DOPF!(grid::PowerGrid; t=1, k=1)
@@ -1826,13 +1826,9 @@ end
 
 function OPF_Model!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites,
     order_book::OrderBook ; update_grid=false)
-    if SimulationSettings.Meta_solver == :none
-        model = build_full_DOPF_model!(grid, SimulationSettings, prerequisites_data)
-        solution_status = optimize_DOPF_model!(model, grid, SimulationSettings, prerequisites_data, order_book; update_grid=update_grid, update_order_book=true)
-        return model, solution_status
-    elseif SimulationSettings.Meta_solver == :CCG
-
-    end
+    model = build_full_DOPF_model!(grid, SimulationSettings, prerequisites_data)
+    solution_status = optimize_DOPF_model!(model, grid, SimulationSettings, prerequisites_data, order_book; update_grid=update_grid, update_order_book=true)
+    return model, solution_status
 end
 
 function SCOPF_Model!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites,
