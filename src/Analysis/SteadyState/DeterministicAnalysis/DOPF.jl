@@ -1221,6 +1221,7 @@ function build_full_DOPF_model!(grid::PowerGrid, SimulationSettings::DOPF_Simula
     DOPF_voltage_limits_dc_node!(model, grid, SimulationSettings, prerequisites_data)
     DOPF_generator_limits_dc_node!(model, grid, SimulationSettings, prerequisites_data)
     DOPF_transition_constraints!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_load_shedding_WCS!(model, grid, simulation_settings, prerequisites_data)
     if length(keys(prerequisites_data.fixed_schedules)) != 0
         DOPF_schedule_fixes!(model, grid, SimulationSettings, prerequisites_data)
     end

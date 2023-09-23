@@ -100,6 +100,7 @@ function DOPF_variable_initialization!(model::Model, grid ::PowerGrid, simulatio
         JuMP.@variable(model, p_gen_ac[g in prerequisites_data.ac_gen_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]])
         JuMP.@variable(model, p_ls_ac[d in prerequisites_data.ac_load_shedding_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]])
         JuMP.@variable(model, p_curt[g in prerequisites_data.ac_gen_curtailment_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]])
+        JuMP.@variable(model, Γ[t in prerequisites_data.time_horizon])
         ###################################################################################
         # Binary commitment variables
         if length(prerequisites_data.commitable_gen_ids) != 0
@@ -931,8 +932,9 @@ function DOPF_commitment_fixes!(model::Model, grid ::PowerGrid, simulation_setti
 end
 
 function DOPF_load_shedding_WCS!(model::Model, grid ::PowerGrid, simulation_settings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites)
-    # TODO: Add this to the workflow
-    JuMP.@constraint(model, gamma_limit[k ∈ prerequisites_data.k, t ∈ prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]], model[:Γ][t] ≥ sum([model[:p_ls_ac][d,k,t]*LoadBids[d]["price"][t][1] for d  in prerequisites_data.ac_load_shedding_ids], init=0))
+    JuMP.@constraint(model, gamma_limit[k ∈ prerequisites_data.k, t ∈ prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+        model[:Γ][t] ≥ sum([model[:p_ls_ac][d,k,t]*LoadBids[d]["price"][t][1] for d  in prerequisites_data.ac_load_shedding_ids], init=0)
+        + sum([model[:p_curt][g,k,t]*1000 for g in prerequisites_data.ac_gen_curtailment_ids], init=0))
 end
 
 function DOPF_objective_function!(model::Model, grid ::PowerGrid, simulation_settings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites)
@@ -943,9 +945,8 @@ function DOPF_objective_function!(model::Model, grid ::PowerGrid, simulation_set
         + sum([model[:p_gen_ac][g,1,t]*GenBids[g]["price"][t][1] + grid.Generators[g].C0*model[:u_gt][g,t]+model[:α_gt][g,t]*grid.Generators[g].start_up_cost+model[:β_gt][g,t]*grid.Generators[g].shut_down_cost for g in prerequisites_data.commitable_gen_ids, t in prerequisites_data.time_horizon], init=0)
         + sum([model[:p_gen_ac][g,1,t]*GenBids[g]["price"][t][1] for g in keys(prerequisites_data.fixed_commitments), t in prerequisites_data.time_horizon], init=0)
         + sum([model[:p_gen_ac][g,1,t]*GenBids[g]["price"][t][1] for g in keys(prerequisites_data.fixed_schedules), t in prerequisites_data.time_horizon], init=0)
-        + sum([model[:p_ls_ac][d,k,t]*LoadBids[d]["price"][t][1] for d  in prerequisites_data.ac_load_shedding_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon if k ∈ prerequisites_data.k_t[t]], init=0)
         + sum([model[:p_gen_dc][g,1,t]*grid.DCGenerators[g].C1 for g in prerequisites_data.dc_gen_ids, t in prerequisites_data.time_horizon], init=0)
-        + sum([model[:p_curt][g,k,t]*1000 for g in prerequisites_data.ac_gen_curtailment_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon if k ∈ prerequisites_data.k_t[t]], init=0))
+        + sum([model[:Γ][t] for t in prerequisites_data.time_horizon], init=0))
 end
 
 function DOPF_objective_function_CCG!(model::Model, grid ::PowerGrid, simulation_settings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites, k)
