@@ -69,7 +69,7 @@ function topology_warm_start!(grid::PowerGrid, SimulationSettings::DOPF_Simulati
                     if t ∉ keys(S0)
                         push!(S0, t => Dict())
                         if 1 ∉ keys(S0[t])
-                            push!(S0, 1 => [branch_id])
+                            push!(S0[t], 1 => [branch_id])
                         end
                     else
                         if 1 ∉ keys(S0[t])
@@ -82,7 +82,7 @@ function topology_warm_start!(grid::PowerGrid, SimulationSettings::DOPF_Simulati
                     if t ∉ keys(S1)
                         push!(S1, t => Dict())
                         if 1 ∉ keys(S1[t])
-                            push!(S1, 1 => [branch_id])
+                            push!(S1[t], 1 => [branch_id])
                         end
                     else
                         if 1 ∉ keys(S1[t])
@@ -103,7 +103,7 @@ function topology_warm_start!(grid::PowerGrid, SimulationSettings::DOPF_Simulati
                         if t ∉ keys(S0)
                             push!(S0, t => Dict())
                             if k ∉ keys(S0[t])
-                                push!(S0, k => [branch_id])
+                                push!(S0[t], k => [branch_id])
                             end
                         else
                             if k ∉ keys(S0[t])
@@ -116,7 +116,7 @@ function topology_warm_start!(grid::PowerGrid, SimulationSettings::DOPF_Simulati
                         if t ∉ keys(S1)
                             push!(S1, t => Dict())
                             if k ∉ keys(S1[t])
-                                push!(S1, k => [branch_id])
+                                push!(S1[t], k => [branch_id])
                             end
                         else
                             if k ∉ keys(S1[t])
