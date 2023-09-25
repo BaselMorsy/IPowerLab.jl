@@ -737,12 +737,18 @@ function DOPF_transition_constraints!(model::Model, grid ::PowerGrid, simulation
     if simulation_settings.load_shedding == [:post]
         JuMP.@constraint(model, no_load_shedding_pre[d in prerequisites_data.ac_load_shedding_ids, t in prerequisites_data.time_horizon],
             model[:p_ls_ac][d,1,t] == 0)
+        JuMP.@constraint(model, no_curtailment_pre[g in prerequisites_data.ac_gen_curtailment_ids, t in prerequisites_data.time_horizon],
+            model[:p_curt][g,1,t] == 0)
     elseif simulation_settings.load_shedding == [:pre]
         JuMP.@constraint(model, no_load_shedding_post[d in prerequisites_data.ac_load_shedding_ids, k in prerequisites_data.k[2:end], t in prerequisites_data.time_horizon; k in prerequisites_data.k_t[t]],
             model[:p_ls_ac][d,k,t] == 0)
+        JuMP.@constraint(model, no_curtailment_post[g in prerequisites_data.ac_gen_curtailment_ids, k in prerequisites_data.k[2:end], t in prerequisites_data.time_horizon; k in prerequisites_data.k_t[t]],
+            model[:p_curt][g,k,t] == 0)
     elseif simulation_settings.load_shedding == []
         JuMP.@constraint(model, no_load_shedding_at_all[d in prerequisites_data.ac_load_shedding_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k in prerequisites_data.k_t[t]],
             model[:p_ls_ac][d,k,t] == 0)
+        JuMP.@constraint(model, no_curtailment_at_all[g in prerequisites_data.ac_gen_curtailment_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k in prerequisites_data.k_t[t]],
+            model[:p_curt][g,k,t] == 0)
     end
 
     # Temporal transitions
@@ -932,6 +938,7 @@ function DOPF_commitment_fixes!(model::Model, grid ::PowerGrid, simulation_setti
 end
 
 function DOPF_load_shedding_WCS!(model::Model, grid ::PowerGrid, simulation_settings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites)
+    LoadBids = prerequisites_data.Order_Book.Load_bids
     JuMP.@constraint(model, gamma_limit[k ∈ prerequisites_data.k, t ∈ prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
         model[:Γ][t] ≥ sum([model[:p_ls_ac][d,k,t]*LoadBids[d]["price"][t][1] for d  in prerequisites_data.ac_load_shedding_ids], init=0)
         + sum([model[:p_curt][g,k,t]*1000 for g in prerequisites_data.ac_gen_curtailment_ids], init=0))

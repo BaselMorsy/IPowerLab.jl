@@ -1360,6 +1360,8 @@ function calculate_opex_t(model::Model,grid::PowerGrid, prerequisites_data::DOPF
         val_p_gen_dc = sum([JuMP.value.(model[:p_gen_dc])[g,1,t]*grid.DCGenerators[g].C1 for g in prerequisites_data.dc_gen_ids], init=0)
         val_p_load_shedding = sum([JuMP.value.(model[:p_ls_ac])[d,k,t]*LoadBids[d]["price"][t] for d  in prerequisites_data.ac_load_shedding_ids, k in prerequisites_data.k_t[t]], init=0)
         
+        val_Γ = JuMP.value.(model[:Γ])[t]
+
         total = val_p_gen_ac + val_p_gen_dc
 
         if include_commitment_cost
@@ -1367,7 +1369,7 @@ function calculate_opex_t(model::Model,grid::PowerGrid, prerequisites_data::DOPF
         end
 
         if include_load_shedding
-            total += val_p_load_shedding
+            total += val_Γ
         end
 
         return total
