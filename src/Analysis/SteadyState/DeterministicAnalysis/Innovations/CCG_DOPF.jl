@@ -139,6 +139,11 @@ function solve_decomposed_model!(model::Model)
     return model
 end
 
+function fix_converter_flows!( prerequisites_data::DOPF_Prerequisites, solved_MP_model::Model, SP_model::Model, t::Int, k::Int)
+   JuMP.@constraint(SP_model, fix_converter_flows[g in prerequisites_data.conv_ac_side_virtual_gen_ids],
+        SP_model[:p_conv_ac][g,k,t] == JuMP.value(solved_MP_model[:p_conv_ac][g,1,t])) 
+end
+
 function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites,
     order_book::OrderBook ; update_grid=false, ϵ=0.1, update_order_book=false)
 
@@ -165,19 +170,25 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
     S1_all = []
     reconf_lines_set_to_1 = []
 
+    LB_it = []
+    UB_it = []
+
     if SimulationSettings.converter_modularization == :continuous && length(grid.N_conv_duplets) > 0
         Converter_Duplets = grid.Converter_Duplets
         for pair_id in keys(Converter_Duplets)
-            module_1 = grid.Converters[Converter_Duplets[pair_id][1]]
-            module_2 = grid.Converters[Converter_Duplets[pair_id][2]]
-            g_bus_1 = grid.Generators[module_1.gen_ac_id].GenBus_ID
-            g_bus_2 = grid.Generators[module_2.gen_ac_id].GenBus_ID
-            line_1 = grid.Buses[g_bus_1].ConnectedLinesIDs[1]
-            line_2 = grid.Buses[g_bus_2].ConnectedLinesIDs[2]
-            @assert grid.Branches[line_1].Fr_bus_ID != grid.Branches[line_2].Fr_bus_ID
+            main_ac_bus = grid.Converters[Converter_Duplets[pair_id][1]].AC_Bus_ID
+            if main_ac_bus ∈ keys(grid.Substations)
+                module_1 = grid.Converters[Converter_Duplets[pair_id][1]]
+                module_2 = grid.Converters[Converter_Duplets[pair_id][2]]
+                g_bus_1 = grid.Generators[module_1.gen_ac_id].GenBus_ID
+                g_bus_2 = grid.Generators[module_2.gen_ac_id].GenBus_ID
+                line_1 = grid.Buses[g_bus_1].ConnectedLinesIDs[1]
+                line_2 = grid.Buses[g_bus_2].ConnectedLinesIDs[2]
+                @assert grid.Branches[line_1].Fr_bus_ID != grid.Branches[line_2].Fr_bus_ID
 
-            push!(reconf_lines_set_to_1, line_1)
-            push!(reconf_lines_set_to_1, line_2)
+                push!(reconf_lines_set_to_1, line_1)
+                push!(reconf_lines_set_to_1, line_2)
+            end
         end
     end
     #Main loop
@@ -226,12 +237,17 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
 
         LB_t = [calculate_opex_t(solved_MP_model,grid, prerequisites_data, t; include_load_shedding=true, include_commitment_cost=false) for t in T]
 
+        push!(LB_it, LB_t)
+
         UB_tk = zeros(length(T), length(K_all))
 
         if SimulationSettings.Parallels
             t_sub_now = @elapsed Threads.@threads for t in T
-                Threads.@threads for k in sort(collect(setdiff(Set(K_all),Set(prerequisites_data.k_t[t]))))
+                Threads.@threads for k in sort(collect(Set(K_all)))
                     SP_model = build_DOPF_SP!(grid, SimulationSettings, prerequisites_data, solved_MP_model, t, k)
+                    if !SimulationSettings.dynamic_converter_control
+                        fix_converter_flows!(prerequisites_data, solved_MP_model, SP_model, t, k)
+                    end
                     solved_SP_model = solve_decomposed_model!(SP_model)
                     push!(SP_models, (t,k) => solved_SP_model)
                     UB_tk[t,k] = JuMP.objective_value(solved_SP_model)
@@ -239,8 +255,11 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
             end
         else
             t_sub_now = @elapsed for t in T
-                for k in sort(collect(setdiff(Set(K_all),Set(prerequisites_data.k_t[t]))))
+                for k in sort(collect(Set(K_all)))
                     SP_model = build_DOPF_SP!(grid, SimulationSettings, prerequisites_data, solved_MP_model, t, k)
+                    if !SimulationSettings.dynamic_converter_control
+                        fix_converter_flows!(prerequisites_data, solved_MP_model, SP_model, t, k)
+                    end
                     solved_SP_model = solve_decomposed_model!(SP_model)
                     push!(SP_models, (t,k) => solved_SP_model)
                     UB_tk[t,k] = JuMP.objective_value(solved_SP_model)
@@ -255,7 +274,9 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
             UB_t[t] = maximum(UB_tk[t,:])
         end
 
-        δ = maximum(abs.(UB_t - LB_t) ./ LB_t)
+        push!(UB_it, UB_t)
+
+        δ = maximum((UB_t - LB_t) ./ LB_t)
 
         if δ ≥ ϵ
             for t in T
@@ -263,6 +284,8 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
                 println("Next k for t = "*string(t)*": "*string(next_k))
                 append!(prerequisites_data.k_t[t], next_k)
             end
+            println(LB_t)
+            println(UB_t)
             starting_topology, S0, S1 = topology_warm_start!(grid, SimulationSettings, prerequisites_data, solved_MP_model)
             push!(S0_all, S0)
             push!(S1_all, S1)
