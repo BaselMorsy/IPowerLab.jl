@@ -14,7 +14,7 @@ function _get_links(url::AbstractString)
 end
 
 function download_available_UC_cases_on_date(date="2017-02-18")
-    url = "https://axavier.org/UnitCommitment.jl/0.3/instances/matpower"  # Replace with the actual URL
+    url = "https://axavier.org/UnitCommitment.jl/0.3/instances/matpower"
     links = _get_links(url)
     case_names = links[11:end-1]
     for case in case_names

@@ -1,3 +1,5 @@
+include("meta_solver.jl")
+
 function build_DOPF_MP!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites)
     return build_full_DOPF_model!(grid,SimulationSettings,prerequisites_data)
 end
@@ -162,6 +164,7 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
     solved_MP_model = []
 
     MP_model = []
+    MP_models = Dict()
     SP_models = Dict()
     starting_topology = Dict()
     S0 = []
@@ -234,6 +237,7 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
             t_master_now = @elapsed solved_MP_model = solve_decomposed_model!(MP_model)
         end
         push!(t_master, t_master_now)
+        push!(MP_models, iter_count => solved_MP_model)
 
         LB_t = [calculate_opex_t(solved_MP_model,grid, prerequisites_data, t; include_load_shedding=true, include_commitment_cost=false) for t in T]
 
@@ -249,7 +253,7 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
                         fix_converter_flows!(prerequisites_data, solved_MP_model, SP_model, t, k)
                     end
                     solved_SP_model = solve_decomposed_model!(SP_model)
-                    push!(SP_models, (t,k) => solved_SP_model)
+                    push!(SP_models, (iter_count,t,k) => solved_SP_model)
                     UB_tk[t,k] = JuMP.objective_value(solved_SP_model)
                 end
             end
@@ -261,7 +265,7 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
                         fix_converter_flows!(prerequisites_data, solved_MP_model, SP_model, t, k)
                     end
                     solved_SP_model = solve_decomposed_model!(SP_model)
-                    push!(SP_models, (t,k) => solved_SP_model)
+                    push!(SP_models, (iter_count,t,k) => solved_SP_model)
                     UB_tk[t,k] = JuMP.objective_value(solved_SP_model)
                 end
             end
@@ -297,6 +301,10 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
         println(iter_count, "  ", δ)
         println("==================================")
     end
+    meta_solver = MetaSolver(SP_models=SP_models, MP_models=MP_models,t_master=t_master, t_sub=t_sub, δ_it=δ_it,
+        LB_it=LB_it, UB_it, UB_it)
+
+    SimulationSettings.Meta_solver_instance = meta_solver 
     status = process_last_MP!(grid, solved_MP_model, prerequisites_data, SimulationSettings, order_book, update_grid, update_order_book)
     return solved_MP_model, status
 end
