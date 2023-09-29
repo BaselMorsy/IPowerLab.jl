@@ -7,5 +7,5 @@
     δ_it = []
     LB_it = []
     UB_it = []
-    misc = []
+    misc = Dict()
 end
