@@ -53,7 +53,7 @@ function build_DOPF_SP!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSett
     prerequisites_data_instance.fixed_topology = fixed_topology
 
     # Building model:
-    return build_snapshot_DOPF_model!(grid, SimulationSettings, prerequisites_data_instance, k=k)
+    return build_snapshot_DOPF_model!(solved_MP_model, grid, SimulationSettings, prerequisites_data_instance, k, t)
 end
 
 function topology_warm_start!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites,
@@ -136,7 +136,8 @@ function topology_warm_start!(grid::PowerGrid, SimulationSettings::DOPF_Simulati
     return starting_topology, S0, S1
 end
 
-function solve_decomposed_model!(model::Model)
+function solve_decomposed_model!(model::Model; t_max=Inf)
+    JuMP.set_attribute(model, "TimeLimit", t_max)
     optimize!(model)
     return model
 end
@@ -166,15 +167,26 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
     MP_model = []
     MP_models = Dict()
     SP_models = Dict()
+    k_last = Dict()
     starting_topology = Dict()
     S0 = []
     S1 = []
     S0_all = []
     S1_all = []
+    τ_visited = []
+    τ_cut = []
     reconf_lines_set_to_1 = []
 
     LB_it = []
     UB_it = []
+
+    if get(SimulationSettings.Meta_solver_instance.misc,"k_final",[]) != []
+        prerequisites_data.k_t = SimulationSettings.Meta_solver_instance.misc["k_final"]
+    end
+
+    if get(SimulationSettings.Meta_solver_instance.misc,"starting_topology",[]) != []
+        starting_topology = SimulationSettings.Meta_solver_instance.misc["starting_topology"]
+    end
 
     if SimulationSettings.converter_modularization == :continuous && length(grid.N_conv_duplets) > 0
         Converter_Duplets = grid.Converter_Duplets
@@ -201,27 +213,49 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
         println("Debug msg @ iteration " * string(iter_count))
         # Solve master-problem
         MP_model = build_DOPF_MP!(grid, SimulationSettings, prerequisites_data)
-        if iter_count > 1
-            ## apply starting topology
-            if length(keys(starting_topology)) > 0
-                for t in prerequisites_data.time_horizon
-                    for r in prerequisites_data.ac_active_reconf_ids
-                        JuMP.set_start_value(MP_model[:z_r][r,1,t], starting_topology[r][1][t])
-                    end
+        
+        ## apply starting topology
+        if length(keys(starting_topology)) > 0
+            for t in prerequisites_data.time_horizon
+                for r in prerequisites_data.ac_active_reconf_ids
+                    JuMP.set_start_value(MP_model[:z_r][r,1,t], starting_topology[r][1][t])
                 end
-                if iter_count > 2
-                    if SimulationSettings.substation_switching["reconf"] == [:pre]
-                        JuMP.@constraint(MP_model, explored_topologies[i in 1:length(keys(S0_all))-1],
-                            sum([MP_model[:z_r][r,1,t] for t in prerequisites_data.time_horizon, r in prerequisites_data.ac_active_reconf_ids if r ∈ S0_all[i][t][1]])
-                            + sum([1-MP_model[:z_r][r,1,t] for t in prerequisites_data.time_horizon, r in prerequisites_data.ac_active_reconf_ids if r ∈ S1_all[i][t][1]]) ≥ 1)
-                    elseif SimulationSettings.substation_switching["reconf"] == [:pre,:post]
-                        JuMP.@constraint(MP_model, explored_topologies[i in 1:length(keys(S0_all))-1],
-                            sum([MP_model[:z_r][r,k,t] for t in prerequisites_data.time_horizon, k in prerequisites_data.k if k ∈ prerequisites_data.k_t[t] && r ∈ S0_all[i][t][k]])
-                            + sum([1-MP_model[:z_r][r,k,t] for t in prerequisites_data.time_horizon, k in prerequisites_data.k if k ∈ prerequisites_data.k_t[t] && r ∈ S1_all[i][t][k]]) ≥ 1)
-                    end
-                end
+                # for c in prerequisites_data.ac_active_coupler_ids
+                #     for k in prerequisites_data.k_t[t][2:end]
+                #         if k in k_last[(iter_count-1,t)]
+                #             value = JuMP.value(MP_models[iter_count-1][:z_c][c,k,t])
+                #             JuMP.set_start_value(MP_model[:z_c][c,k,t], value)
+                #         # else
+                #         #     value = JuMP.value(SP_models[(iter_count-1,t,k)][:z_c][c,k,t])
+                #         #     JuMP.set_start_value(MP_model[:z_c][c,k,t], value)
+                #         end
+                        
+                #     end
+                # end
             end
+            # if iter_count > 2
+            #     if SimulationSettings.substation_switching["reconf"] == [:pre]
+            #         JuMP.@constraint(MP_model, explored_topologies[i in 1:length(keys(S0_all))],
+            #             sum([MP_model[:z_r][r,1,t] for t in prerequisites_data.time_horizon, r in prerequisites_data.ac_active_reconf_ids if r ∈ S0_all[i][t][1]])
+            #             + sum([1-MP_model[:z_r][r,1,t] for t in prerequisites_data.time_horizon, r in prerequisites_data.ac_active_reconf_ids if r ∈ S1_all[i][t][1]]) ≥ 1)
+            #     elseif SimulationSettings.substation_switching["reconf"] == [:pre,:post]
+            #         JuMP.@constraint(MP_model, explored_topologies[i in 1:length(keys(S0_all))],
+            #             sum([MP_model[:z_r][r,k,t] for t in prerequisites_data.time_horizon, k in prerequisites_data.k if k ∈ prerequisites_data.k_t[t] && r ∈ S0_all[i][t][k]])
+            #             + sum([1-MP_model[:z_r][r,k,t] for t in prerequisites_data.time_horizon, k in prerequisites_data.k if k ∈ prerequisites_data.k_t[t] && r ∈ S1_all[i][t][k]]) ≥ 1)
+            #     end
+            # end
         end
+        # if iter_count > 1
+        #     # apply lower bound on cost
+        #     GenBids = prerequisites_data.Order_Book.Gen_bids
+        #     LoadBids = prerequisites_data.Order_Book.Load_bids
+        #     JuMP.@constraint(MP_model, cost_lower_bound, sum([MP_model[:p_gen_ac][g,1,t]*GenBids[g]["price"][t][1] for g in prerequisites_data.non_commitable_gen_ids, t in prerequisites_data.time_horizon], init=0)
+        #         + sum([MP_model[:p_gen_ac][g,1,t]*GenBids[g]["price"][t][1] + grid.Generators[g].C0*MP_model[:u_gt][g,t]+MP_model[:α_gt][g,t]*grid.Generators[g].start_up_cost+MP_model[:β_gt][g,t]*grid.Generators[g].shut_down_cost for g in prerequisites_data.commitable_gen_ids, t in prerequisites_data.time_horizon], init=0)
+        #         + sum([MP_model[:p_gen_ac][g,1,t]*GenBids[g]["price"][t][1] for g in keys(prerequisites_data.fixed_commitments), t in prerequisites_data.time_horizon], init=0)
+        #         + sum([MP_model[:p_gen_ac][g,1,t]*GenBids[g]["price"][t][1] for g in keys(prerequisites_data.fixed_schedules), t in prerequisites_data.time_horizon], init=0)
+        #         + sum([MP_model[:p_gen_dc][g,1,t]*grid.DCGenerators[g].C1 for g in prerequisites_data.dc_gen_ids, t in prerequisites_data.time_horizon], init=0)
+        #         + sum([MP_model[:Γ][t] for t in prerequisites_data.time_horizon], init=0) ≥ sum(LB_it[end], init=0))
+        # end
 
         if reconf_lines_set_to_1 != []
             for t in prerequisites_data.time_horizon
@@ -230,11 +264,11 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
                 end
             end
         end
-        t_master_now = @elapsed solved_MP_model = solve_decomposed_model!(MP_model)
+        t_master_now = @elapsed solved_MP_model = solve_decomposed_model!(MP_model; t_max = get(SimulationSettings.Meta_solver_instance.misc,["t_max"],Inf))
         
         if !JuMP.has_values(solved_MP_model)
-            MP_model = build_DOPF_MP!(grid, SimulationSettings, prerequisites_data)
-            t_master_now = @elapsed solved_MP_model = solve_decomposed_model!(MP_model)
+            status = process_last_MP!(grid, solved_MP_model, prerequisites_data, SimulationSettings, order_book, update_grid, update_order_book)
+            return solved_MP_model, status
         end
         push!(t_master, t_master_now)
         push!(MP_models, iter_count => solved_MP_model)
@@ -247,7 +281,7 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
 
         if SimulationSettings.Parallels
             t_sub_now = @elapsed Threads.@threads for t in T
-                Threads.@threads for k in sort(collect(Set(K_all)))
+                Threads.@threads for k in sort(collect(setdiff(Set(K_all),Set(prerequisites_data.k_t[t])))) 
                     SP_model = build_DOPF_SP!(grid, SimulationSettings, prerequisites_data, solved_MP_model, t, k)
                     if !SimulationSettings.dynamic_converter_control
                         fix_converter_flows!(prerequisites_data, solved_MP_model, SP_model, t, k)
@@ -259,7 +293,7 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
             end
         else
             t_sub_now = @elapsed for t in T
-                for k in sort(collect(Set(K_all)))
+                for k in sort(collect(setdiff(Set(K_all),Set(prerequisites_data.k_t[t])))) 
                     SP_model = build_DOPF_SP!(grid, SimulationSettings, prerequisites_data, solved_MP_model, t, k)
                     if !SimulationSettings.dynamic_converter_control
                         fix_converter_flows!(prerequisites_data, solved_MP_model, SP_model, t, k)
@@ -284,15 +318,26 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
 
         if δ ≥ ϵ
             for t in T
-                next_k = find_next_k(UB_tk[t,:], 1)
+                next_k = find_next_k(UB_tk[t,:],prerequisites_data.k_t[t][2:end], 1)
                 println("Next k for t = "*string(t)*": "*string(next_k))
+                println("Current k's for t = "*string(t)*": "*string(prerequisites_data.k_t[t]))
+                push!(k_last, (iter_count,t) => prerequisites_data.k_t[t])
                 append!(prerequisites_data.k_t[t], next_k)
             end
             println(LB_t)
             println(UB_t)
             starting_topology, S0, S1 = topology_warm_start!(grid, SimulationSettings, prerequisites_data, solved_MP_model)
-            push!(S0_all, S0)
-            push!(S1_all, S1)
+            push!(τ_visited, starting_topology)
+            if iter_count > 1
+                if starting_topology == τ_visited[end-1] # meaning that the same topology is still useful
+                    # Do nothing because we are not sure if this topology will fail or not in the next iteration
+                else
+                    # the topology now is different from the last iterations's topology -> meaning that τ_{i-1} is obsolete now
+                    push!(S0_all, S0)
+                    push!(S1_all, S1)
+                    push!(τ_cut, τ_visited[end-1])
+                end
+            end
         end
         push!(δ_it, δ)
         
@@ -301,8 +346,9 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
         println(iter_count, "  ", δ)
         println("==================================")
     end
-    meta_solver = MetaSolver(SP_models=SP_models, MP_models=MP_models,t_master=t_master, t_sub=t_sub, δ_it=δ_it,
-        LB_it=LB_it, UB_it, UB_it)
+
+    meta_solver = MetaSolver(MP_models=MP_models[iter_count],t_master=t_master, t_sub=t_sub, δ_it=δ_it,
+        LB_it=LB_it, UB_it=UB_it, misc=Dict("k_final"=>prerequisites_data.k_t, "starting_topology"=>starting_topology))
 
     SimulationSettings.Meta_solver_instance = meta_solver 
     status = process_last_MP!(grid, solved_MP_model, prerequisites_data, SimulationSettings, order_book, update_grid, update_order_book)
@@ -310,8 +356,9 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
 end
 
 function process_last_MP!(grid, model, prerequisites_data, SimulationSettings, order_book, update_grid, update_order_book)
-    push!(grid.Operating_Cost, JuMP.objective_value(model))
+    
     if JuMP.has_values(model)
+        push!(grid.Operating_Cost, JuMP.objective_value(model))
         flag = haskey(model, :p_ls_ac)
         if update_order_book
             for t in prerequisites_data.time_horizon
@@ -353,6 +400,18 @@ function process_last_MP!(grid, model, prerequisites_data, SimulationSettings, o
     end
 end
 
-function find_next_k(v::Vector, nk::Int)
-    return sortperm(v, rev=true)[1:nk]
+function find_next_k(my_vector::Vector,my_other_vector::Vector, n::Int)
+    # Create a filtered vector of indices for elements not in my_other_vector
+    filtered_indices = filter(i -> !(my_vector[i] in my_other_vector), 1:length(my_vector))
+    
+    # Check if n is greater than the size of the filtered vector
+    if n > length(filtered_indices)
+        return filtered_indices  # Return all indices if n is larger
+    end
+    
+    # Sort the filtered indices based on my_vector and return the largest n indices
+    sorted_indices = sortperm(my_vector[filtered_indices], rev=true)
+    largest_n_indices = filtered_indices[sorted_indices[1:n]]
+    
+    return largest_n_indices
 end
