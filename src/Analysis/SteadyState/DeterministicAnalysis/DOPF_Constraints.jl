@@ -5,7 +5,8 @@
     converter_model = :NF_lossless # means that P_conv_ac + P_conv_dc = 0, can be any thing from [:NF_lossy, :FNL] but only :NF_lossles implemented now
     dynamic_converter_control = true # allows for converter redispatch post-contingency
     converter_modularization = :discrete # useful in case of busbar splitting, where converter modules can be modeled using binary or continous variables
-    
+    converter_redispatch_penalty = 0
+
     load_shedding = [:post] # [:pre], [:post], [:pre,:post] -> if empty, default behaviour is [:pre,:post]
     transmission_switching = [:post] # [:pre] , [:post] , [:pre,:post] -> if empty, default behaviour is [:pre,:post]
     substation_switching = Dict("splitting" => [:post], "reconf" => [:pre]) # -> if empty, default behaviour is [:pre,:post]
@@ -262,6 +263,15 @@ function DOPF_variable_initialization!(model::Model, grid ::PowerGrid, simulatio
     if length(prerequisites_data.conv_dc_side_virtual_gen_ids) != 0
         JuMP.@variable(model, p_conv_dc[conv_id in prerequisites_data.conv_dc_side_virtual_gen_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]])
         JuMP.@variable(model, p_conv_ac[conv_id in prerequisites_data.conv_ac_side_virtual_gen_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]])
+        
+        if length(collect(keys(prerequisites_data.conv_duplets))) != 0
+            JuMP.@variable(model, Δp_conv_pair[pair in keys(prerequisites_data.conv_duplets), k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]] ≥ 0)
+            JuMP.@variable(model, Δp_conv_ac[conv_id in prerequisites_data.conv_ac_side_virtual_gen_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]]≥ 0)
+        else
+            JuMP.@variable(model, Δp_conv_pair[pair in keys(prerequisites_data.conv_duplets), k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]]≥ 0)
+            JuMP.@variable(model, Δp_conv_ac[conv_id in prerequisites_data.conv_ac_side_virtual_gen_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]] ≥ 0)
+        end
+        
     end
     if length(prerequisites_data.b2b_gen_ids) != 0
         JuMP.@variable(model, p_conv_b2b[conv_id in prerequisites_data.b2b_gen_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]])
@@ -942,7 +952,9 @@ function DOPF_load_shedding_WCS!(model::Model, grid ::PowerGrid, simulation_sett
     LoadBids = prerequisites_data.Order_Book.Load_bids
     JuMP.@constraint(model, gamma_limit[k ∈ prerequisites_data.k, t ∈ prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
         model[:Γ][t] ≥ sum([model[:p_ls_ac][d,k,t]*LoadBids[d]["price"][t][1] for d  in prerequisites_data.ac_load_shedding_ids], init=0)
-        + sum([model[:p_curt][g,k,t]*10000 for g in prerequisites_data.ac_gen_curtailment_ids], init=0))
+        + sum([model[:p_curt][g,k,t]*10000 for g in prerequisites_data.ac_gen_curtailment_ids], init=0)
+        + sum([model[:Δp_conv_ac][g,k,t]*simulation_settings.converter_redispatch_penalty for g in prerequisites_data.conv_ac_side_virtual_gen_ids], init=0)
+        + + sum([model[:Δp_conv_pair][p,k,t]*simulation_settings.converter_redispatch_penalty for p in keys(prerequisites_data.conv_duplets)], init=0))
 end
 
 function DOPF_objective_function!(model::Model, grid ::PowerGrid, simulation_settings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites)
@@ -957,17 +969,58 @@ function DOPF_objective_function!(model::Model, grid ::PowerGrid, simulation_set
         + sum([model[:Γ][t] for t in prerequisites_data.time_horizon], init=0))
 end
 
-function DOPF_objective_function_CCG!(model::Model, grid ::PowerGrid, simulation_settings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites, k)
+function DOPF_objective_function_CCG!(model::Model, grid ::PowerGrid, simulation_settings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites, k, t)
     # non_commitable_gen costs + commitable_gen costs + fixed_commitment_gen costs + fixed_schedule_gen costs + load_shedding costs + dc_gen cost
     GenBids = prerequisites_data.Order_Book.Gen_bids
     LoadBids = prerequisites_data.Order_Book.Load_bids
-    JuMP.@objective(model, Min, sum([model[:p_gen_ac][g,k,t]*GenBids[g]["price"][t][1] for g in prerequisites_data.non_commitable_gen_ids, t in prerequisites_data.time_horizon], init=0)
-        + sum([model[:p_gen_ac][g,k,t]*GenBids[g]["price"][t][1] + grid.Generators[g].C0*model[:u_gt][g,t]+model[:α_gt][g,t]*grid.Generators[g].start_up_cost+model[:β_gt][g,t]*grid.Generators[g].shut_down_cost for g in prerequisites_data.commitable_gen_ids, t in prerequisites_data.time_horizon], init=0)
-        + sum([model[:p_gen_ac][g,k,t]*GenBids[g]["price"][t][1] for g in keys(prerequisites_data.fixed_commitments), t in prerequisites_data.time_horizon], init=0)
-        + sum([model[:p_gen_ac][g,k,t]*GenBids[g]["price"][t][1] for g in keys(prerequisites_data.fixed_schedules), t in prerequisites_data.time_horizon], init=0)
-        + sum([model[:p_ls_ac][d,k,t]*LoadBids[d]["price"][t][1] for d  in prerequisites_data.ac_load_shedding_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon if k ∈ prerequisites_data.k_t[t]], init=0)
-        + sum([model[:p_gen_dc][g,k,t]*grid.DCGenerators[g].C1 for g in prerequisites_data.dc_gen_ids, t in prerequisites_data.time_horizon], init=0)
-        + sum([model[:p_curt][g,k,t]*10000 for g in prerequisites_data.ac_gen_curtailment_ids, k in prerequisites_data.k, t in prerequisites_data.time_horizon if k ∈ prerequisites_data.k_t[t]], init=0))
+    JuMP.@objective(model, Min, sum([model[:p_gen_ac][g,k,t]*GenBids[g]["price"][t][1] for g in prerequisites_data.non_commitable_gen_ids], init=0)
+        + sum([model[:p_gen_ac][g,k,t]*GenBids[g]["price"][t][1] + grid.Generators[g].C0*model[:u_gt][g,t]+model[:α_gt][g,t]*grid.Generators[g].start_up_cost+model[:β_gt][g,t]*grid.Generators[g].shut_down_cost for g in prerequisites_data.commitable_gen_ids], init=0)
+        + sum([model[:p_gen_ac][g,k,t]*GenBids[g]["price"][t][1] for g in keys(prerequisites_data.fixed_commitments)], init=0)
+        + sum([model[:p_gen_ac][g,k,t]*GenBids[g]["price"][t][1] for g in keys(prerequisites_data.fixed_schedules)], init=0)
+        + sum([model[:p_ls_ac][d,k,t]*LoadBids[d]["price"][t][1] for d  in prerequisites_data.ac_load_shedding_ids], init=0)
+        + sum([model[:p_gen_dc][g,k,t]*grid.DCGenerators[g].C1 for g in prerequisites_data.dc_gen_ids], init=0)
+        + sum([model[:p_curt][g,k,t]*GenBids[g]["price"][t][1]*10 for g in prerequisites_data.ac_gen_curtailment_ids], init=0)
+        + sum([model[:Δp_conv_ac][g,k,t]*simulation_settings.converter_redispatch_penalty for g in prerequisites_data.conv_ac_side_virtual_gen_ids], init=0)
+        + sum([model[:Δp_conv_pair][p,k,t]*simulation_settings.converter_redispatch_penalty for p in keys(prerequisites_data.conv_duplets)], init=0))
+end
+
+function DOPF_converter_redispatch_cost_with_base_case!(model::Model, grid ::PowerGrid, simulation_settings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites)
+    
+    if length(collect(keys(prerequisites_data.conv_duplets))) != 0
+        pair_dict = prerequisites_data.conv_duplets
+        
+        JuMP.@constraint(model, Δp_conv_abs_1[p in keys(prerequisites_data.conv_duplets), k in prerequisites_data.k[2:end], t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+            model[:Δp_conv_pair][p,k,t] ≥ (model[:p_conv_ac][grid.Converters[pair_dict[p][1]].gen_ac_id,k,t]+model[:p_conv_ac][grid.Converters[pair_dict[p][2]].gen_ac_id,k,t])
+            -(model[:p_conv_ac][grid.Converters[pair_dict[p][1]].gen_ac_id,1,t]+model[:p_conv_ac][grid.Converters[pair_dict[p][2]].gen_ac_id,1,t]))
+        
+        JuMP.@constraint(model, Δp_conv_abs_2[p in keys(prerequisites_data.conv_duplets), k in prerequisites_data.k[2:end], t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+            model[:Δp_conv_pair][p,k,t] ≥ (model[:p_conv_ac][grid.Converters[pair_dict[p][1]].gen_ac_id,1,t]+model[:p_conv_ac][grid.Converters[pair_dict[p][2]].gen_ac_id,1,t])
+            -(model[:p_conv_ac][grid.Converters[pair_dict[p][1]].gen_ac_id,k,t]+model[:p_conv_ac][grid.Converters[pair_dict[p][2]].gen_ac_id,k,t]))
+    else
+        JuMP.@constraint(model, Δp_conv_abs_1[g in prerequisites_data.conv_ac_side_virtual_gen_ids, k in prerequisites_data.k[2:end], t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+            model[:Δp_conv_ac][g,k,t] ≥ model[:p_conv_ac][g,k,t]-model[:p_conv_ac][g,1,t])
+        JuMP.@constraint(model, Δp_conv_abs_2[g in prerequisites_data.conv_ac_side_virtual_gen_ids, k in prerequisites_data.k[2:end], t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+            model[:Δp_conv_ac][g,k,t] ≥ model[:p_conv_ac][g,1,t]-model[:p_conv_ac][g,k,t])
+    end
+end
+
+function DOPF_converter_redispatch_cost_for_contingency!(model::Model, solved_MP::Model, grid ::PowerGrid, simulation_settings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites, k::Int, t::Int)
+    
+    if length(collect(keys(prerequisites_data.conv_duplets))) != 0
+        pair_dict = prerequisites_data.conv_duplets
+        JuMP.@constraint(model, Δp_conv_abs_1[p in keys(prerequisites_data.conv_duplets), k in prerequisites_data.k[2:end], t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+            model[:Δp_conv_pair][p,k,t] ≥ (model[:p_conv_ac][grid.Converters[pair_dict[p][1]].gen_ac_id,k,t]+model[:p_conv_ac][grid.Converters[pair_dict[p][2]].gen_ac_id,k,t])
+            -(JuMP.value(solved_MP[:p_conv_ac][grid.Converters[pair_dict[p][1]].gen_ac_id,1,t])+JuMP.value(solved_MP[:p_conv_ac][grid.Converters[pair_dict[p][2]].gen_ac_id,1,t])))
+
+        JuMP.@constraint(model, Δp_conv_abs_2[p in keys(prerequisites_data.conv_duplets), k in prerequisites_data.k[2:end], t in prerequisites_data.time_horizon; k ∈ prerequisites_data.k_t[t]],
+            model[:Δp_conv_pair][p,k,t] ≥ (JuMP.value(solved_MP[:p_conv_ac][grid.Converters[pair_dict[p][1]].gen_ac_id,1,t])+JuMP.value(solved_MP[:p_conv_ac][grid.Converters[pair_dict[p][2]].gen_ac_id,1,t]))
+            -(model[:p_conv_ac][grid.Converters[pair_dict[p][1]].gen_ac_id,k,t]+model[:p_conv_ac][grid.Converters[pair_dict[p][2]].gen_ac_id,k,t]))
+    else
+        JuMP.@constraint(model, Δp_conv_abs_1[g in prerequisites_data.conv_ac_side_virtual_gen_ids],
+            model[:Δp_conv_ac][g,k,t] ≥ model[:p_conv_ac][g,k,t]-JuMP.value(solved_MP[:p_conv_ac][g,1,t]))
+        JuMP.@constraint(model, Δp_conv_abs_2[g in prerequisites_data.conv_ac_side_virtual_gen_ids],
+            model[:Δp_conv_ac][g,k,t] ≥ JuMP.value(solved_MP[:p_conv_ac][g,1,t])-model[:p_conv_ac][g,k,t])
+    end
 end
 ###############################################
 
