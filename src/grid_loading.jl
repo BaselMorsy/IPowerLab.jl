@@ -236,8 +236,10 @@ end
 function set_generation_multiplier!(grid ::PowerGrid,value)
 
     for key in keys(grid.Generators)
-        grid.Generators[key].Pg_max *= value/grid.gen_multiplier
-        grid.Generators[key].Qg_max *= value/grid.gen_multiplier
+        if grid.Generators[key].GenType != :virtual
+            grid.Generators[key].Pg_max *= value/grid.gen_multiplier
+            grid.Generators[key].Qg_max *= value/grid.gen_multiplier
+        end
     end
 
     grid.gen_multiplier = value
@@ -256,20 +258,18 @@ function set_converter_capacity_multiplier!(grid::PowerGrid, value)
         grid.Converters[key].rate *= value / grid.converter_capacity_multiplier
         gen_dc_id = grid.Converters[key].gen_dc_id
         gen_ac_id = grid.Converters[key].gen_ac_id
-        grid.Generators[gen_dc_id].Pg_max *= value / grid.converter_capacity_multiplier
-        grid.Generators[gen_dc_id].Qg_max *= value / grid.converter_capacity_multiplier
+        grid.DCGenerators[gen_dc_id].Pg_max *= value / grid.converter_capacity_multiplier
+        grid.DCGenerators[gen_dc_id].Qg_max *= value / grid.converter_capacity_multiplier
 
         grid.Generators[gen_ac_id].Pg_max *= value / grid.converter_capacity_multiplier
         grid.Generators[gen_ac_id].Qg_max *= value / grid.converter_capacity_multiplier
 
-        grid.Generators[gen_dc_id].Pg_min *= value / grid.converter_capacity_multiplier
-        grid.Generators[gen_dc_id].Qg_min *= value / grid.converter_capacity_multiplier
+        grid.DCGenerators[gen_dc_id].Pg_min *= value / grid.converter_capacity_multiplier
+        grid.DCGenerators[gen_dc_id].Qg_min *= value / grid.converter_capacity_multiplier
 
         grid.Generators[gen_ac_id].Pg_min *= value / grid.converter_capacity_multiplier
         grid.Generators[gen_ac_id].Qg_min *= value / grid.converter_capacity_multiplier
     end
-
-    
 
     grid.converter_capacity_multiplier = value
 end
