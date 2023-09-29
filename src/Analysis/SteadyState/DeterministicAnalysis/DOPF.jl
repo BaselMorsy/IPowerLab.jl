@@ -705,7 +705,7 @@ function run_DOPF_simulation!(grid::PowerGrid, simulation_settings::DOPF_Simulat
 end
 
 function run_DOPF_simulation_no_market!(grid::PowerGrid, simulation_settings::DOPF_SimulationSettings,
-    prerequisites_data::DOPF_Prerequisites; update_grid=true)
+    prerequisites_data::DOPF_Prerequisites; update_grid=true, return_model=false)
 
     solved_flag = false
     order_book = prerequisites_data.Order_Book
@@ -761,7 +761,13 @@ function run_DOPF_simulation_no_market!(grid::PowerGrid, simulation_settings::DO
             merge_element!(grid, :Generator, gen_duplet_id)
         end
     end
-    return solved_flag
+
+    if return_model
+        return solved_flag, model
+    else
+        return solved_flag
+    end
+    
 end
 
 function DOPF_post_processing!(model::Model, grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites, order_book::OrderBook)
@@ -1213,6 +1219,7 @@ function build_full_DOPF_model!(grid::PowerGrid, SimulationSettings::DOPF_Simula
     DOPF_angle_limits_ac_node!(model, grid, SimulationSettings, prerequisites_data) 
     DOPF_converter_flow!(model, grid, SimulationSettings, prerequisites_data)
     DOPF_converter_capacity!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_converter_redispatch_cost_with_base_case!(model, grid, SimulationSettings, prerequisites_data)
     DOPF_nodal_balance_dc_node!(model, grid, SimulationSettings, prerequisites_data)
     DOPF_powerflow_dc_branch_static!(model, grid, SimulationSettings, prerequisites_data)
     DOPF_thermal_limits_dc_branch_static!(model, grid, SimulationSettings, prerequisites_data)
@@ -1239,7 +1246,7 @@ function build_full_DOPF_model!(grid::PowerGrid, SimulationSettings::DOPF_Simula
     return model
 end
 
-function build_snapshot_DOPF_model!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites; k=1)
+function build_snapshot_DOPF_model!(solved_MP::Model, grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites, k::Int, t::Int)
 
     solver = SimulationSettings.MILP_solver
     NLP_flag = false
@@ -1278,6 +1285,7 @@ function build_snapshot_DOPF_model!(grid::PowerGrid, SimulationSettings::DOPF_Si
     DOPF_thermal_limits_dc_link!(model, grid, SimulationSettings, prerequisites_data)
     DOPF_voltage_limits_dc_node!(model, grid, SimulationSettings, prerequisites_data)
     DOPF_generator_limits_dc_node!(model, grid, SimulationSettings, prerequisites_data)
+    DOPF_converter_redispatch_cost_for_contingency!(model, solved_MP, grid, SimulationSettings, prerequisites_data, k, t)
     if length(keys(prerequisites_data.fixed_schedules)) != 0
         DOPF_schedule_fixes!(model, grid, SimulationSettings, prerequisites_data; k=k)
     end
@@ -1290,7 +1298,7 @@ function build_snapshot_DOPF_model!(grid::PowerGrid, SimulationSettings::DOPF_Si
     if length(keys(prerequisites_data.fixed_commitments)) != 0
         DOPF_commitment_fixes!(model, grid, SimulationSettings, prerequisites_data)
     end
-    DOPF_objective_function_CCG!(model, grid, SimulationSettings, prerequisites_data, k)
+    DOPF_objective_function_CCG!(model, grid, SimulationSettings, prerequisites_data, k, t)
  
     return model
 end
