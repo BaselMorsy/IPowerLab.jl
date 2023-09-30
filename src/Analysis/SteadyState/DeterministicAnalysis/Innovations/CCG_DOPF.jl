@@ -264,7 +264,7 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
                 end
             end
         end
-        t_master_now = @elapsed solved_MP_model = solve_decomposed_model!(MP_model; t_max = get(SimulationSettings.Meta_solver_instance.misc,"t_max",Inf))
+        t_master_now = @elapsed solved_MP_model = solve_decomposed_model!(MP_model; t_max = get(SimulationSettings.Meta_solver_instance.misc,"t_max",1000))
         
         if !JuMP.has_values(solved_MP_model)
             status = process_last_MP!(grid, solved_MP_model, prerequisites_data, SimulationSettings, order_book, update_grid, update_order_book)
@@ -281,7 +281,7 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
 
         if SimulationSettings.Parallels
             t_sub_now = @elapsed Threads.@threads for t in T
-                Threads.@threads for k in sort(collect(setdiff(Set(K_all),Set(prerequisites_data.k_t[t])))) 
+                Threads.@threads for k in sort(collect(K_all))
                     SP_model = build_DOPF_SP!(grid, SimulationSettings, prerequisites_data, solved_MP_model, t, k)
                     if !SimulationSettings.dynamic_converter_control
                         fix_converter_flows!(prerequisites_data, solved_MP_model, SP_model, t, k)
@@ -293,7 +293,7 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
             end
         else
             t_sub_now = @elapsed for t in T
-                for k in sort(collect(setdiff(Set(K_all),Set(prerequisites_data.k_t[t])))) 
+                for k in sort(collect(K_all)) 
                     SP_model = build_DOPF_SP!(grid, SimulationSettings, prerequisites_data, solved_MP_model, t, k)
                     if !SimulationSettings.dynamic_converter_control
                         fix_converter_flows!(prerequisites_data, solved_MP_model, SP_model, t, k)
