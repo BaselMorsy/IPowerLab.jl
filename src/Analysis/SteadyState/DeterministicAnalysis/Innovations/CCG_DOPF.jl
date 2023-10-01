@@ -12,8 +12,8 @@ function build_DOPF_SP!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSett
 
     # Fixing schedules and emptying commitable/non-commitable gen lists:
     # p_gen_ac = JuMP.value.(solved_MP_model[:p_gen_ac][:,1,t])
+    fixed_schedules = Dict()
     if k ∉ prerequisites_data_instance.contingency_redispatch
-        fixed_schedules = Dict()
         for g in prerequisites_data_instance.ac_gen_ids
             push!(fixed_schedules, g => Dict(t => JuMP.value(solved_MP_model[:p_gen_ac][g,1,t])))
         end
@@ -148,7 +148,7 @@ function fix_converter_flows!( prerequisites_data::DOPF_Prerequisites, solved_MP
 end
 
 function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSettings, prerequisites_data::DOPF_Prerequisites,
-    order_book::OrderBook ; update_grid=false, ϵ=0.1, update_order_book=false)
+    order_book::OrderBook ; update_grid=false, ϵ=0.01, update_order_book=false)
 
     δ = Inf
     
@@ -287,7 +287,7 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
                         fix_converter_flows!(prerequisites_data, solved_MP_model, SP_model, t, k)
                     end
                     solved_SP_model = solve_decomposed_model!(SP_model)
-                    push!(SP_models, (iter_count,t,k) => solved_SP_model)
+                    # push!(SP_models, (iter_count,t,k) => solved_SP_model)
                     UB_tk[t,k] = JuMP.objective_value(solved_SP_model)
                 end
             end
@@ -318,7 +318,7 @@ function solve_DOPF_CCG!(grid::PowerGrid, SimulationSettings::DOPF_SimulationSet
 
         if δ ≥ ϵ
             for t in T
-                next_k = find_next_k(UB_tk[t,:],prerequisites_data.k_t[t][2:end], 1)
+                next_k = find_next_k(UB_tk[t,:],[], 1)
                 println("Next k for t = "*string(t)*": "*string(next_k))
                 println("Current k's for t = "*string(t)*": "*string(prerequisites_data.k_t[t]))
                 push!(k_last, (iter_count,t) => prerequisites_data.k_t[t])
